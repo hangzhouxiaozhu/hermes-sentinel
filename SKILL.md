@@ -172,14 +172,25 @@ Hermes 每 10 分钟自动调用 `guardian_tick()`，执行：
 - 自动记录模型、Token 消耗（来自 API 返回体，真实精准）
 - 仅有价格表时估算费用，否则只统计 Token
 
-### 3. 安装 Skill 前（hook）
+### 3. 安装 Skill 前（需要 Hermes 集成）
 
-安装新 Skill 前自动调用 `guardian_on_skill_install()`：
+需要 Hermes 主循环在安装 Skill 前调用 `guardian_on_skill_install(skill_path)`：
 
+```python
+# Hermes 安装 Skill 的代码中
+from hermes_sentinel.guardian_core import guardian_on_skill_install
+result = guardian_on_skill_install(skill_directory)
+if not result["approved"]:
+    # 阻止安装，显示 result["reason"]
+```
+
+功能：
 - 静态扫描：硬编码密钥、高危命令、恶意模式
 - 致命/严重风险 → 自动阻止安装
 - 低风险 → 静默放行
 - 用户只看到"这个插件不太安全"或完全无感
+
+> **当前状态：** 此功能需要 Hermes 主循环配合，未通过 plugin 自动注册（Hermes 的 `VALID_HOOKS` 不含 skill 安装事件）。欢迎 PR 或在 Issue 中讨论集成方案。
 
 ---
 

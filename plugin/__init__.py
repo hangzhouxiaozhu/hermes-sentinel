@@ -3,8 +3,11 @@
 Records every LLM API call's prompt/completion tokens to
 ``~/.hermes/logs/model_cost.log`` via Sentinel's ``cost_tracker``.
 
-Works with all providers and proxy APIs — only depends on the ``usage``
-object that every OpenAI-compatible response includes.
+Works with all providers and proxy APIs — extracts token counts from
+the ``usage`` object in the API response.  Falls back gracefully when
+no usage data is present.
+
+Auto-activated by ``install.sh``; no manual setup needed.
 """
 
 from __future__ import annotations
@@ -17,44 +20,46 @@ from typing import Any, Dict
 logger = logging.getLogger("hermes_sentinel")
 
 
-def _track_usage(**kwargs: Any) -> None:
-    """``post_api_request`` hook callback — record token usage."""
-    usage: Dict[str, Any] = kwargs.get("usage") or {}
-    prompt = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-    completion = usage.get("completion_tokens") or usage.get("output_tokens") or 0
-
-    if not prompt and not completion:
-        return  # no usage data, nothing to record
-
-    # 优先用用户实际配置的 model（agent.model），中转不改这个字段
-    # response_model 是 API 返回体里的，中转代理可能改写它
-    model = kwargs.get("model") or kwargs.get("response_model") or "unknown"
-    api_mode = kwargs.get("api_mode", "unknown")
-
-    # ── locate Sentinel's cost_tracker ──────────────────────────
-    _sentinel_scripts = os.path.join(
+def _locate_sentinel_scripts() -> str:
+    """Locate Sentinel's scripts directory (best-effort)."""
+    path = os.path.join(
         os.path.expanduser("~"),
         ".hermes", "skills", "system", "hermes-sentinel", "scripts",
     )
-    if not os.path.isdir(_sentinel_scripts):
-        logger.debug("Sentinel scripts not found at %s", _sentinel_scripts)
+    if os.path.isdir(path) and path not in sys.path:
+        sys.path.insert(0, path)
+    return path
+
+
+def _record_token_usage(**kwargs: Any) -> None:
+    """``post_api_request`` hook callback — record token usage."""
+    usage: Dict[str, Any] = kwargs.get("usage") or {}
+    if not usage:
         return
 
-    if _sentinel_scripts not in sys.path:
-        sys.path.insert(0, _sentinel_scripts)
+    model = kwargs.get("model") or kwargs.get("response_model") or "unknown"
+    api_mode = kwargs.get("api_mode", "unknown")
+
+    _locate_sentinel_scripts()
 
     try:
-        from cost_tracker import record
+        from cost_tracker import extract_usage, record
+
+        # 用 core 的 extract_usage() 统一解析，避免插件侧重复逻辑
+        parsed = extract_usage({"usage": usage})
+        if parsed.get("confidence") != "high":
+            return
 
         result = record(
             model=model,
-            input_tokens=int(prompt),
-            output_tokens=int(completion),
+            input_tokens=parsed["input_tokens"],
+            output_tokens=parsed["output_tokens"],
             task_type=api_mode,
         )
         logger.debug(
             "Recorded: %s | in=%s out=%s cost=%s",
-            model, prompt, completion, result.get("cost_usd", "N/A"),
+            model, parsed["input_tokens"], parsed["output_tokens"],
+            result.get("cost_usd", "N/A"),
         )
     except Exception as exc:
         logger.warning("Failed to record token usage: %s", exc)
@@ -62,5 +67,8 @@ def _track_usage(**kwargs: Any) -> None:
 
 def register(ctx) -> None:
     """Register plugin hooks with Hermes."""
-    ctx.register_hook("post_api_request", _track_usage)
-    logger.info("Hermes Sentinel plugin registered: post_api_request → cost_tracker.record")
+    ctx.register_hook("post_api_request", _record_token_usage)
+    logger.info(
+        "Hermes Sentinel plugin registered: post_api_request → "
+        "cost_tracker.extract_usage + record"
+    )

@@ -65,16 +65,19 @@ HIGH_RISK_PATTERNS = {
 
 
 def _log(action, detail, severity="INFO"):
-    """写审计日志"""
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "action": action,
-        "severity": severity,
-        "detail": detail,
-    }
-    with open(LOG_FILE, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    """写审计日志（带容错，日志写失败不影响安全判定）"""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": action,
+            "severity": severity,
+            "detail": detail,
+        }
+        with open(LOG_FILE, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # 日志写失败不应影响安全判定
 
 
 # ── 外部接口 ──────────────────────────────────────────────

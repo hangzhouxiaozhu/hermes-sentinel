@@ -209,9 +209,13 @@ def _cpu_darwin():
             result["load_1min"] = round(float(parts[0]), 2)
             result["load_5min"] = round(float(parts[1]), 2)
             result["load_15min"] = round(float(parts[2]), 2)
-        result["cores"] = int(subprocess.check_output(["sysctl", "-n", "hw.ncpu"]).strip())
     except Exception:
         pass
+    # 核数独立 try/except + fallback 到 os.cpu_count()
+    try:
+        result["cores"] = int(subprocess.check_output(["sysctl", "-n", "hw.ncpu"]).strip())
+    except Exception:
+        result["cores"] = os.cpu_count() or 0
     return result
 
 
@@ -616,12 +620,24 @@ def get_ip_address(iface: str) -> str:
 
 def get_gateway() -> str:
     """获取默认网关 IP"""
-    if IS_MACOS or IS_LINUX:
+    if IS_MACOS:
         try:
             out = subprocess.check_output(["route", "-n", "get", "default"], timeout=3).decode()
             for line in out.split("\n"):
                 if "gateway:" in line:
                     return line.split(":")[1].strip()
+        except Exception:
+            pass
+        return ""
+    if IS_LINUX:
+        try:
+            out = subprocess.check_output(["ip", "route"], timeout=3).decode()
+            for line in out.split("\n"):
+                if line.startswith("default"):
+                    parts = line.split()
+                    idx = parts.index("via") if "via" in parts else -1
+                    if idx >= 0 and idx + 1 < len(parts):
+                        return parts[idx + 1]
         except Exception:
             pass
         return ""
