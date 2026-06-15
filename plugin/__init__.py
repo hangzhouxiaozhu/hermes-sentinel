@@ -26,7 +26,9 @@ def _track_usage(**kwargs: Any) -> None:
     if not prompt and not completion:
         return  # no usage data, nothing to record
 
-    model = kwargs.get("response_model") or kwargs.get("model") or "unknown"
+    # 优先用用户实际配置的 model（agent.model），中转不改这个字段
+    # response_model 是 API 返回体里的，中转代理可能改写它
+    model = kwargs.get("model") or kwargs.get("response_model") or "unknown"
     api_mode = kwargs.get("api_mode", "unknown")
 
     # ── locate Sentinel's cost_tracker ──────────────────────────
