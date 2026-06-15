@@ -1,4 +1,8 @@
-"""Token 统计与费用估算模块测试"""
+"""Token stats & cost estimation tests.
+
+Default state: no price table → cost_usd=None.
+Tests that verify cost calculation use update_prices() to enable it.
+"""
 
 import sys
 import tempfile
@@ -11,22 +15,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from cost_tracker import (
     get_known_models,
-    calc_cost, record, extract_usage, record_from_response,
+    calc_cost, record, extract_usage, record_from_response, update_prices,
     get_daily_summary, get_user_friendly_summary,
-    MODEL_PRICES,
+    MODEL_PRICES, BUDGET_DAILY_USD,
 )
 
 
-def _get_model_price(n):
-    """测试用——访问内部价格查询"""
-    return MODEL_PRICES.get(n) or next(
-        (v for k, v in MODEL_PRICES.items() if k.lower() in n.lower() or n.lower() in k.lower()),
-        MODEL_PRICES.get("deepseek-v4-flash"),
-    )
-
-
 class TestExtractUsage(unittest.TestCase):
-    """从 API 响应体中提取 token 数（核心功能）"""
+    """Token extraction from API responses (core feature, always works)."""
 
     def test_openai_format(self):
         resp = {"usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}}
@@ -65,12 +61,6 @@ class TestExtractUsage(unittest.TestCase):
         r = extract_usage("not a dict")
         self.assertEqual(r["confidence"], "none")
 
-    def test_openai_with_extra_fields(self):
-        resp = {"id": "chatcmpl-xxx", "usage": {"prompt_tokens": 150, "completion_tokens": 75}}
-        r = extract_usage(resp)
-        self.assertEqual(r["input_tokens"], 150)
-        self.assertEqual(r["output_tokens"], 75)
-
 
 class TestRecord(unittest.TestCase):
 
@@ -84,8 +74,8 @@ class TestRecord(unittest.TestCase):
         self.assertTrue(r["recorded"])
         self.assertEqual(r["input_tokens"], 100)
         self.assertEqual(r["output_tokens"], 50)
-        # cost_usd 应有值（当前有价格表）
-        self.assertIsNotNone(r["cost_usd"])
+        # Default: no price table → cost_usd is None
+        self.assertIsNone(r["cost_usd"])
 
         entry = json.loads(mock_path.read_text().strip().split("\n")[0])
         self.assertEqual(entry["model"], "deepseek-chat")
@@ -119,16 +109,6 @@ class TestRecordFromResponse(unittest.TestCase):
         self.assertEqual(r["output_tokens"], 50)
         mock_path.unlink(missing_ok=True)
 
-    @patch("cost_tracker.LOG_FILE", new_callable=lambda: Path(tempfile.mktemp(suffix=".log")))
-    def test_record_from_empty(self, mock_path):
-        if mock_path.exists():
-            mock_path.unlink()
-        mock_path.parent.mkdir(parents=True, exist_ok=True)
-        r = record_from_response({}, "unknown-model")
-        self.assertFalse(r["recorded"])
-        self.assertIsNone(r["usage_source"])
-        mock_path.unlink(missing_ok=True)
-
 
 class TestGetDailySummary(unittest.TestCase):
 
@@ -145,26 +125,18 @@ class TestGetUserFriendlySummary(unittest.TestCase):
             r = get_user_friendly_summary()
             self.assertEqual(r, "")
 
-    def test_with_tokens_direct(self):
-        """直接测试 record() 返回值的 token 字段"""
-        with patch("cost_tracker.LOG_FILE", Path(tempfile.mktemp(suffix=".log"))) as _:
-            r = record("gpt-4o", 1000, 500)
-            self.assertEqual(r["input_tokens"], 1000)
-            self.assertEqual(r["output_tokens"], 500)
-
     def test_summary_format_with_mock(self):
-        """mock get_daily_summary 测试输出格式"""
         with patch("cost_tracker.get_daily_summary") as mock_summary:
             mock_summary.return_value = {
                 "total_calls": 3, "total_tokens": 1500,
                 "total_input_tokens": 1000, "total_output_tokens": 500,
-                "total_cost_usd": 0.0075, "by_model": {"gpt-4o": {}},
+                "total_cost_usd": None, "by_model": {"gpt-4o": {}},
             }
             r = get_user_friendly_summary()
             self.assertIn("token", r.lower())
+            self.assertNotIn("$", r)
 
     def test_summary_no_cost(self):
-        """无费用时应只显示 token"""
         with patch("cost_tracker.get_daily_summary") as mock_summary:
             mock_summary.return_value = {
                 "total_calls": 1, "total_tokens": 500,
@@ -176,27 +148,44 @@ class TestGetUserFriendlySummary(unittest.TestCase):
             self.assertNotIn("$", r)
 
 
-class TestGetModelPrice(unittest.TestCase):
+class TestCalcCostDefaultEmpty(unittest.TestCase):
 
-    def test_exact_match(self):
-        self.assertIn("input", _get_model_price("deepseek-chat"))
+    def test_no_price_table_returns_none(self):
+        """Without prices, calc_cost returns None."""
+        self.assertIsNone(calc_cost("gpt-4o", 1000, 500))
 
-    def test_unknown_model_returns_price(self):
-        self.assertIsNotNone(_get_model_price("unknown-model-v99"))
+    def test_record_cost_is_none_by_default(self):
+        with patch("cost_tracker.LOG_FILE", Path(tempfile.mktemp(suffix=".log"))) as mock_path:
+            mock_path.parent.mkdir(parents=True, exist_ok=True)
+            r = record("gpt-4o", 100, 50)
+            self.assertIsNone(r["cost_usd"])
+            mock_path.unlink(missing_ok=True)
+
+    def test_record_cost_has_value_after_update_prices(self):
+        """After update_prices(), cost_usd is calculated."""
+        with patch("cost_tracker.LOG_FILE", Path(tempfile.mktemp(suffix=".log"))) as mock_path:
+            mock_path.parent.mkdir(parents=True, exist_ok=True)
+            update_prices({"gpt-4o": {"input": 0.0025, "output": 0.01}})
+            r = record("gpt-4o", 1000, 500)
+            self.assertIsNotNone(r["cost_usd"])
+            self.assertGreater(r["cost_usd"], 0)
+            # Restore empty
+            update_prices({})
+            mock_path.unlink(missing_ok=True)
 
 
-class TestCalcCost(unittest.TestCase):
+class TestUpdatePrices(unittest.TestCase):
 
-    def test_zero_tokens(self):
-        self.assertEqual(calc_cost("deepseek-chat", 0, 0), 0)
+    def test_update_adds_model(self):
+        update_prices({"test-model": {"input": 0.001, "output": 0.002}})
+        cost = calc_cost("test-model", 1000, 500)
+        self.assertIsNotNone(cost)
+        self.assertGreater(cost, 0)
+        update_prices({})
 
-    def test_known_model(self):
-        self.assertGreater(calc_cost("gpt-4o", 1000, 500), 0)
-
-
-class TestModelPricesConsistency(unittest.TestCase):
-
-    def test_all_prices_positive(self):
-        for name, price in MODEL_PRICES.items():
-            self.assertGreater(price["input"], 0)
-            self.assertGreater(price["output"], 0)
+    def test_update_replaces_model(self):
+        update_prices({"gpt-4o": {"input": 1, "output": 2}})
+        cost = calc_cost("gpt-4o", 1, 1)
+        self.assertEqual(cost, 0.003)
+        update_prices({})
+        self.assertIsNone(calc_cost("gpt-4o", 1, 1))

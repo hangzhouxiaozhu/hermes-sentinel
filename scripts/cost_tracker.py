@@ -16,30 +16,18 @@ from pathlib import Path
 from collections import defaultdict
 
 # ── 价格表 ────────────────────────────────────────────────
-# 可选配置。不设置或设为空字典 {} 则不计费，只统计 token。
-# 价格表由 maintainer 维护，详见 update_prices()。
-MODEL_PRICES = {
-    "deepseek-v4-pro":       {"input": 0.00055, "output": 0.00219},
-    "deepseek-v4-flash":     {"input": 0.00014, "output": 0.00055},
-    "deepseek-chat":         {"input": 0.00014, "output": 0.00028},
-    "deepseek-reasoner":     {"input": 0.00055, "output": 0.00219},
-    "gpt-4o":                {"input": 0.00250, "output": 0.01000},
-    "gpt-4o-mini":           {"input": 0.00015, "output": 0.00060},
-    "gpt-4.1":               {"input": 0.00200, "output": 0.00800},
-    "o3-mini":               {"input": 0.00110, "output": 0.00440},
-    "claude-sonnet-4":       {"input": 0.00300, "output": 0.01500},
-    "claude-haiku-3.5":      {"input": 0.00080, "output": 0.00400},
-    "claude-opus-4":         {"input": 0.01500, "output": 0.07500},
-    "gemini-2.5-pro":        {"input": 0.00125, "output": 0.01000},
-    "gemini-2.5-flash":      {"input": 0.00015, "output": 0.00060},
-    "grok-4":                {"input": 0.00200, "output": 0.00800},
-    "grok-4.20":             {"input": 0.00200, "output": 0.00800},
-    "kimi-k2.6":             {"input": 0.00055, "output": 0.00219},
-    "mistral-large":         {"input": 0.00200, "output": 0.00600},
-}
+# 默认空。费用估算是可选功能，仅当用户主动配置价格表后才启用。
+# 不配置时只统计 token，cost_usd 始终为 None。
+# 配置方式：
+#   from cost_tracker import update_prices
+#   update_prices({"gpt-4o": {"input": 0.0025, "output": 0.01}})
+# 参考价格见 references/model-cost-reference.md
+MODEL_PRICES: dict = {}
 
 HERMES_HOME = Path.home() / ".hermes"
 LOG_FILE = HERMES_HOME / "logs" / "model_cost.log"
+
+# 每日预算上限 (USD) — 仅在配置价格表后生效
 BUDGET_DAILY_USD = 0.50
 
 
@@ -224,15 +212,15 @@ def get_known_models() -> list:
 def update_prices(new_prices: dict) -> dict:
     """
     更新模型价格表。不设置价格表时，费用计算始终返回 None。
+
+    传入空字典 {} 会清空当前价格表，恢复为 token-only 模式。
     """
     global MODEL_PRICES, PRICE_TABLE_INFO
     updated = 0
     added = 0
+    MODEL_PRICES.clear()
     for name, price in new_prices.items():
-        if name in MODEL_PRICES:
-            updated += 1
-        else:
-            added += 1
+        added += 1
         MODEL_PRICES[name] = price
     PRICE_TABLE_INFO["models_count"] = len(MODEL_PRICES)
     PRICE_TABLE_INFO["last_updated"] = datetime.now().strftime("%Y-%m")
