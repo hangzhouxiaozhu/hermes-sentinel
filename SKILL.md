@@ -1,6 +1,6 @@
 ---
 name: hermes-sentinel
-description: Adaptive instruction understanding (industry coordinate system) + hardware monitoring, network quality detection, token stats, self-healing, security audit. Fully automatic, invisible to the user.
+description: Beginner-friendly intent translator + hardware monitoring, network quality detection, token stats, self-healing, security audit. Fully automatic, invisible to the user.
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon
@@ -42,45 +42,38 @@ Problem detected
 
 ---
 
-## Core Feature: Adaptive Instruction Understanding (Industry Coordinate System)
+## Core Feature: Beginner-Friendly Intent Translator
 
-When user input is short or ambiguous, Sentinel uses a 4-layer engine to recognize the scenario and produce a professional rewrite plan.
+When a novice user types short fuzzy commands like "too dark", "garbled", or "too slow",
+Sentinel translates them into clear, actionable instructions that Hermes can execute directly.
 
-### Trigger conditions
-
-- Input ≤8 characters AND contains no concrete object noun
-- Input is in the fuzzy-terms vocabulary ("too dark", "garbled", "looks bad", "continue", "fix it"...)
-
-### Pipeline
+### How it works
 
 ```
 "too dark"
    ↓
-① is_ambiguous_instruction() → True
+intent_translator.translate("太暗")
    ↓
-② context_resolver → extract signal words from file/messages/skills
-   ↓  match: wechat + cover + rendering → new_media_visual_design
-③ industry_profiles → fuzzy-term table → "improve brightness, contrast"
-   ↓
-④ build_rewrite_plan() → {
-       rewritten_instruction: "Optimize the current wechat cover brightness and mobile readability...",
-       standards_used: [mobile_readability, thumbnail_legibility],
-       search_queries: ["wechat cover design mobile readability best practices 2026"],
-   }
+{
+  "should_translate": true,
+  "translated": "User thinks the current result is too dark. First determine
+                 what they're working on (image, web page, or document).
+                 If image/cover: increase brightness and title contrast,
+                 check thumbnail and mobile readability. Avoid overexposure.",
+  "category": "visual_adjustment"
+}
 ```
 
-### Built-in industries (v1)
+### Supported fuzzy terms
 
-| Industry | Example fuzzy terms |
-|----------|-------------------|
-| New media visual design | too dark, looks bad, too messy |
-| Social media content | no views, bad data, no traffic |
-| Software engineering | garbled, crash, won't run |
-| AI operations | too expensive, too slow |
-| Document writing | too verbose, too short |
-| Data analysis | unclear, wrong |
+| Category | User says | Hermes gets |
+|----------|-----------|-------------|
+| Visual | 太暗、太亮、不好看、太乱、看不清 | Specific visual adjustment instructions |
+| Code/API | 乱码、报错、跑不起来、没反应 | Encoding fix, debug, runtime repair steps |
+| Hermes usage | 太慢、太贵、连不上、没输出 | Performance, cost, network check |
+| Document | 太啰嗦、太短、看不懂 | Simplify, expand, rewrite instructions |
 
-> **Integration:** Requires the Hermes main loop to call `guardian_before_user_message()` as a pre-process hook.
+> **Integration:** Requires the Hermes main loop to call `guardian_before_user_message()` before processing user input.
 
 ### When to speak
 

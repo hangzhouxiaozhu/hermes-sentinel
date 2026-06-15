@@ -47,35 +47,52 @@ except ImportError:
     network_monitor = None
 
 try:
-    import adaptive_understanding
+    import intent_translator
 except ImportError:
-    adaptive_understanding = None
+    intent_translator = None
 
 # ── 用户消息前置 hook ──────────────────────────────────────
 
 def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
     """
-    用户消息前置 hook — 模糊指令检测 + 专业重构。
+    用户消息前置 hook — 模糊指令翻译。
 
-    SKILL.md 声明的 before_user_message handler。
-    在 Hermes 主循环处理用户输入前调用。
+    将小白模糊输入（"太暗"、"乱码"、"太慢"）翻译成 Hermes 能执行的清晰指令。
 
     参数:
         user_input: 用户原始输入
-        context: 会话上下文 dict
+        context: 会话上下文 dict（至少含 conversation_context.current_file）
 
     返回:
-        {"action": "pass"|"rewrite", "input": str, "original_input": str, "metadata": dict}
+        {"action": "pass"|"translate", "input": str, "original_input": str, "metadata": dict}
     """
-    if adaptive_understanding:
+    if intent_translator:
         try:
-            return adaptive_understanding.guardian_before_user_message(user_input, context or {})
+            ctx = context or {}
+            conv = ctx.get("conversation_context") or {}
+            current_file = conv.get("current_file") if isinstance(conv, dict) else None
+
+            result = intent_translator.translate(user_input, current_file=current_file)
+
+            if result.get("should_translate"):
+                return {
+                    "action": "translate",
+                    "input": result["translated"] or user_input,
+                    "original_input": user_input,
+                    "metadata": result,
+                }
+            return {
+                "action": "pass",
+                "input": user_input,
+                "original_input": user_input,
+                "metadata": result,
+            }
         except Exception as exc:
             return {
                 "action": "pass",
                 "input": user_input,
                 "original_input": user_input,
-                "metadata": {"should_rewrite": False,
+                "metadata": {"should_translate": False,
                              "error": str(exc),
                              "error_type": type(exc).__name__},
             }
@@ -83,8 +100,8 @@ def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
         "action": "pass",
         "input": user_input,
         "original_input": user_input,
-        "metadata": {"should_rewrite": False,
-                     "error": "adaptive_understanding module not imported"},
+        "metadata": {"should_translate": False,
+                     "error": "intent_translator module not imported"},
     }
 
 
