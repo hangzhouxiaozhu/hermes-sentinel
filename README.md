@@ -71,8 +71,9 @@ Hermes 主循环
     │   │   └── (异常时) full check       → 诊断根因 + 建议
     │   └── self_heal.quick_check()       → 自动重试 / 通知
     │
-    ├── API 调用后 hook → guardian_core.guardian_on_api_call()
-    │   └── cost_tracker.record()
+    ├── API 返回后 hook → guardian_core.guardian_on_api_response()  ← 推荐
+    │   └── cost_tracker.record_from_response() → 自动提取 token
+    │        或用 guardian_on_api_call() → 传入 token 数
     │
     └── 安装 skill 前 hook → guardian_core.guardian_on_skill_install()
         ├── skill_auditor.scan()
@@ -80,6 +81,48 @@ Hermes 主循环
 ```
 
 **所有模块不直接输出到终端**，通过 flag 文件与 narrator 层和 Hermes 主循环通讯。
+
+---
+
+## 成本记账集成指南
+
+成本记账需要 Hermes 主循环配合。两种方式：
+
+### 推荐方式：传入 API 响应体（自动提取 token）
+
+Hermes 每次 API 调用拿到返回体后，调用 `guardian_on_api_response()`：
+
+```python
+from hermes_sentinel.guardian_core import guardian_on_api_response
+
+# 假设 response 是 API 返回的完整 JSON
+response = openai.chat.completions.create(model="gpt-4o", ...)
+
+# 传入原始响应体，cost_tracker 自己提取 token 数
+guardian_on_api_response(
+    response=response.model_dump(),  # 原始响应体
+    model="gpt-4o",
+)
+```
+
+支持自动提取的响应格式：
+
+| 提供商 | 提取字段 |
+|--------|---------|
+| OpenAI / DeepSeek | `response.usage.prompt_tokens` + `completion_tokens` |
+| Anthropic | `response.usage.input_tokens` + `output_tokens` |
+| Google Gemini | `response.usageMetadata.promptTokenCount` + `candidatesTokenCount` |
+| 通用平铺格式 | `response.prompt_tokens` + `completion_tokens` |
+
+### 备选方式：传入 token 数
+
+```python
+guardian_on_api_call(model="gpt-4o", input_tokens=100, output_tokens=50)
+```
+
+### 效果
+
+接入后，每次 API 调用自动记录到 `~/.hermes/logs/model_cost.log`，每日汇总在日报中体现，超预算时 narrator 自动提醒。
 
 ---
 
