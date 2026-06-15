@@ -1,24 +1,26 @@
 #!/bin/bash
-# Hermes Guardian — 每日巡检 + 日报（建议每日 9:00）
-# 调用 guardian_core 生成报告并记录日志
+# Hermes Sentinel — 每日巡检 + 日报（建议每天 9 点）
+# 由 install.sh 安装时自动配置 cron
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$SCRIPT_DIR/.."
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "/usr/bin/python3")
+SKILL_DIR="$HOME/.hermes/skills/system/hermes-sentinel"
 
-/usr/bin/python3 -c "
+if [ ! -d "$SKILL_DIR" ]; then
+    logger -t sentinel "ERROR: skill directory not found at $SKILL_DIR"
+    exit 1
+fi
+
+cd "$SKILL_DIR" || exit 1
+
+"$PYTHON" -c "
 import sys
-sys.path.insert(0, '$PROJECT_DIR/scripts')
+sys.path.insert(0, 'scripts')
+from guardian_core import guardian_tick, guardian_daily_report
 
-# 1. 执行定时巡检
-from guardian_core import guardian_tick
+# 执行巡检
 guardian_tick()
 
-# 2. 生成日报，写到日志
-from daily_report import generate
-report = generate()
-log_path = '$PROJECT_DIR/../reports'
-import os
-os.makedirs(log_path, exist_ok=True)
-with open(f'{log_path}/daily_$(date +%Y%m%d).md', 'w') as f:
-    f.write(report)
-"
+# 生成日报
+report = guardian_daily_report()
+print(report)
+" 2>&1 | logger -t sentinel-daily
