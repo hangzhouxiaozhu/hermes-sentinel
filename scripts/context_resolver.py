@@ -135,6 +135,30 @@ def resolve_context(
 
     confidence = possible[0][1] if possible else 0.0
 
+    # ── Infer task type ──
+    file_lower = (current_file or "").lower()
+    all_text = " ".join(signals).lower()
+
+    task_type = "general"
+    if any(ext in file_lower for ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".psd", ".ai"]):
+        task_type = "visual_edit"
+    elif any(ext in file_lower for ext in [".py", ".js", ".ts", ".java", ".go", ".rs"]):
+        task_type = "code_fix"
+    elif any(ext in file_lower for ext in [".xlsx", ".xls", ".csv"]):
+        task_type = "data_analysis"
+    elif any(ext in file_lower for ext in [".pptx", ".ppt"]):
+        task_type = "presentation"
+    elif any(ext in file_lower for ext in [".docx", ".doc", ".md", ".txt"]):
+        task_type = "document_writing"
+    elif "封面" in all_text or "海报" in all_text or "渲染" in all_text:
+        task_type = "visual_edit"
+    elif "代码" in all_text or "报错" in all_text or "乱码" in all_text:
+        task_type = "code_fix"
+    elif "表格" in all_text or "数据" in all_text or "图表" in all_text:
+        task_type = "data_analysis"
+    elif "PPT" in all_text or "报告" in all_text or "文档" in all_text:
+        task_type = "document_writing"
+
     return {
         "signals": signals[:50],
         "possible_industries": possible,
@@ -142,4 +166,5 @@ def resolve_context(
         "recent_tasks": recent_tasks,
         "current_tool": current_tool,
         "current_file": current_file,
+        "task_type": task_type,
     }

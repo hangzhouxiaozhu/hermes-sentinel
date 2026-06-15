@@ -70,14 +70,21 @@ def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
     if adaptive_understanding:
         try:
             return adaptive_understanding.guardian_before_user_message(user_input, context or {})
-        except Exception:
-            pass
+        except Exception as exc:
+            return {
+                "action": "pass",
+                "input": user_input,
+                "original_input": user_input,
+                "metadata": {"should_rewrite": False,
+                             "error": str(exc),
+                             "error_type": type(exc).__name__},
+            }
     return {
         "action": "pass",
         "input": user_input,
         "original_input": user_input,
         "metadata": {"should_rewrite": False,
-                     "error": "adaptive_understanding unavailable"},
+                     "error": "adaptive_understanding module not imported"},
     }
 
 
