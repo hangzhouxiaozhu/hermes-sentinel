@@ -39,9 +39,9 @@ HIGH_RISK_PATTERNS = {
         (r'xox[bprs]-[a-zA-Z0-9]+', "HIGH: Slack token"),
         (r'tvly-[a-zA-Z0-9_-]+', "MEDIUM: Tavily API key"),
         (r'AIza[0-9A-Za-z\-_]{35}', "HIGH: Google API key"),
-        (r'(?i)(api[_-]?key|apikey)\s*[:=]\s*["\']?[a-zA-Z0-9_-]{20,}', "HIGH: Generic API key assignment"),
-        (r'(?i)(secret|password|token)\s*[:=]\s*["\']?[a-zA-Z0-9_-]{20,}', "HIGH: Generic secret assignment"),
-        (r'(?i)(appsecret|app_secret)\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', "CRITICAL: AppSecret hardcoded"),
+        (r'(?i)\b(api[_-]?key|apikey)\s*[:=]\s*["\']?[a-zA-Z0-9_-]{20,}', "HIGH: Generic API key assignment"),
+        (r'(?i)\b(secret|password|token)\s*[:=]\s*["\']?[a-zA-Z0-9_-]{20,}', "HIGH: Generic secret assignment"),
+        (r'(?i)\b(appsecret|app_secret)\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', "CRITICAL: AppSecret hardcoded"),
     ],
     "privacy_leak": [
         (r'~/.hermes/\.env', "MEDIUM: References .env path"),
@@ -128,9 +128,10 @@ def scan(skill_path: str) -> dict:
             "approved": False,
             "reason": f"Blocked: {', '.join(reasons[:3])}",
             "user_reason": f"这个插件不太安全（{top_reason.split(':')[0].strip()}风险），我没让它装上。",
+            "findings": all_findings,
         }
 
-    return {"approved": True, "reason": None, "user_reason": None}
+    return {"approved": True, "reason": None, "user_reason": None, "findings": all_findings}
 
 
 def check_skill_manifest(skill_name: str) -> list:
@@ -158,7 +159,9 @@ def _scan_file(filepath):
     """扫描单个文件，返回发现的问题"""
     findings = []
     try:
-        content = Path(filepath).read_text()
+        content = Path(filepath).read_text(errors="replace")
+    except UnicodeDecodeError:
+        return []  # 二进制文件跳过
     except Exception as e:
         return [{"file": str(filepath), "severity": "ERROR", "message": f"Cannot read: {e}"}]
 

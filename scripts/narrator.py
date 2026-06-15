@@ -81,8 +81,13 @@ def _describe_hardware_warn(ctx) -> str:
     if actions:
         action_msgs = []
         if "cleaned_logs" in actions:
-            freed = actions.get("freed_gb", 0)
-            action_msgs.append(f"帮你清理了些旧日志（多了 {freed}GB 空间）")
+            freed = ctx.get("freed_gb", 0)
+            if freed >= 0.5:
+                action_msgs.append(f"帮你清理了些旧日志（多了 {freed}GB 空间）")
+            elif freed >= 0.1:
+                action_msgs.append("帮你清理了些旧日志，多了点空间")
+            else:
+                action_msgs.append("帮你清理了些旧日志")
         if "compressed" in actions:
             action_msgs.append("帮你压缩了上下文，应该好点了")
         if action_msgs:
@@ -104,17 +109,25 @@ def _describe_hardware_danger(ctx) -> str:
 
 def _describe_health_warn(ctx) -> str:
     """健康预警 → 人话"""
-    issue = ctx.get("issue", "")
-    if "network" in issue:
-        return "网络不太稳，我试着重连一下。"
-    return "有个小问题在后台处理，不影响你使用。"
+    issues = ctx.get("issues", [])
+    if not issues:
+        return "有个小问题在后台处理，不影响你使用。"
+    msg = ""
+    for i in issues:
+        if "broken skill" in i:
+            msg = f"有 {i}，不影响使用，但建议看看。"
+        elif "log" in i:
+            msg = "日志写入有点问题，但不影响当前使用。"
+    return msg or "有个小问题在后台处理，不影响你使用。"
 
 
 def _describe_health_danger(ctx) -> str:
     """健康危险 → 人话"""
-    issue = ctx.get("issue", "")
-    if "network" in issue:
-        return "连不上网了，你先忙别的，连上了我自动恢复。"
+    issues = ctx.get("issues", [])
+    if not issues:
+        return "有个问题需要处理，我还在尝试修复。"
+    if any("log" in i for i in issues):
+        return "日志写入失败，功能可能会受影响，需要检查一下。"
     return "有个问题需要处理，我还在尝试修复。"
 
 

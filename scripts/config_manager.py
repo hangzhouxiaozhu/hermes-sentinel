@@ -1,7 +1,8 @@
 """
-Hermes Guardian — 配置冲突检测 (Phase 2)
+Hermes Sentinel — 配置冲突检测
 
-功能: 扫描所有已安装 skill 的配置建议，自动检测并合并冲突。
+功能: 扫描所有已安装 skill 的配置建议，检测冲突并给出推荐值。
+注意：本模块只检测和推荐，不写入配置。配置修改需由用户或 Hermes 主循环执行。
 被 guardian_core 调用，不直接输出到终端。
 """
 
@@ -80,19 +81,20 @@ def detect_conflicts() -> list:
     return conflicts
 
 
-def auto_merge(skill_path: str) -> dict:
+def detect_and_recommend(skill_path: str) -> dict:
     """
-    自动合并新 skill 的配置建议。
+    检测新 skill 引入的配置冲突并给出推荐值。
 
     对所有冲突域，取多数派推荐值。
     如果平局，不做任何事。
+    注意：不实际写入配置，只检测和推荐。
 
     返回:
-        {"merged": bool, "conflicts_found": int, "resolutions": {key: value}}
+        {"has_conflicts": bool, "conflicts_found": int, "resolutions": {key: value}}
     """
     conflicts = detect_conflicts()
     if not conflicts:
-        return {"merged": True, "conflicts_found": 0, "resolutions": {}}
+        return {"has_conflicts": False, "conflicts_found": 0, "resolutions": {}}
 
     resolutions = {}
     for c in conflicts:
@@ -100,4 +102,4 @@ def auto_merge(skill_path: str) -> dict:
         if rec:
             resolutions[c["domain"]] = rec["value"]
 
-    return {"merged": len(resolutions) > 0, "conflicts_found": len(conflicts), "resolutions": resolutions}
+    return {"has_conflicts": len(resolutions) > 0, "conflicts_found": len(conflicts), "resolutions": resolutions}

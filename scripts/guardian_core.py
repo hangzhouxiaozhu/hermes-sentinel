@@ -74,17 +74,15 @@ def guardian_tick() -> dict:
         except Exception:
             pass  # 避免单模块 crash 影响整体
 
-    # 2. 故障检测（快速）
+    # 2. 故障检测（Skill 完整性 + 日志健康）
     if self_heal:
         try:
             health = self_heal.quick_check()
             if not health.get("healthy", True):
-                recovered = self_heal.auto_recover(health.get("issue", ""))
-                if not recovered:
-                    notifications.append({
-                        "type": f"health_{health.get('severity', 'warn')}",
-                        "context": health,
-                    })
+                notifications.append({
+                    "type": f"health_{health.get('severity', 'warn')}",
+                    "context": health,
+                })
         except Exception:
             pass
 
@@ -149,9 +147,9 @@ def guardian_on_skill_install(skill_path: str) -> dict:
     if not audit["approved"]:
         return {"approved": False, "reason": audit.get("user_reason", "该 Skill 存在安全风险，已自动阻止。")}
 
-    # 配置冲突自动合并（静默）
+    # 配置冲突检测（只检测推荐，不写入）
     try:
-        config_manager.auto_merge(skill_path)
+        config_manager.detect_and_recommend(skill_path)
     except Exception:
         pass
 
