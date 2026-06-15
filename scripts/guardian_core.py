@@ -129,10 +129,9 @@ def guardian_tick() -> dict:
 def guardian_on_api_call(model: str, input_tokens: int, output_tokens: int,
                          task_type: str = "unknown") -> dict:
     """
-    API 调用结束后自动记账。
+    API 调用结束后自动记账（由调用方提供 token 数）。
 
-    返回:
-        {"recorded": bool, "over_budget": bool}
+    推荐使用 guardian_on_api_response()，数据更精准。
     """
     if cost_tracker:
         try:
@@ -140,6 +139,30 @@ def guardian_on_api_call(model: str, input_tokens: int, output_tokens: int,
         except Exception:
             pass
     return {"recorded": False, "over_budget": False}
+
+
+def guardian_on_api_response(response: dict, model: str,
+                              task_type: str = "unknown") -> dict:
+    """
+    API 返回后自动记录——从响应体中提取真实 token 数。
+
+    相比 guardian_on_api_call()，这个函数不需要调用方提供 token，
+    它自己解析 response.usage 中的数据。
+
+    参数:
+        response: API 返回的完整 JSON 响应体
+        model: 模型名称（如 "deepseek-chat"）
+
+    返回:
+        {"recorded": bool, "over_budget": bool, "cost_usd": float,
+         "usage_source": str|None}
+    """
+    if cost_tracker:
+        try:
+            return cost_tracker.record_from_response(response, model, task_type)
+        except Exception:
+            pass
+    return {"recorded": False, "over_budget": False, "cost_usd": 0, "usage_source": None}
 
 
 # ── 安装 Skill 前 hook ───────────────────────────────────

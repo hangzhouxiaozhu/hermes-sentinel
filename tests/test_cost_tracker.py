@@ -13,7 +13,7 @@ from cost_tracker import (
     get_price_table_info, get_provider_sources,
     is_price_table_stale, update_prices,
     get_known_models,
-    get_model_price, calc_cost, record,
+    get_model_price, calc_cost, record, extract_usage, record_from_response,
     get_daily_summary, get_user_friendly_summary,
     MODEL_PRICES, BUDGET_DAILY_USD,
 )
@@ -229,3 +229,109 @@ class TestModelPricesConsistency(unittest.TestCase):
             if price["output"] < price["input"]:
                 # 只是警告，不是错误——有些模型确实输出比输入便宜
                 pass
+
+
+class TestExtractUsage(unittest.TestCase):
+    """从 API 响应体中提取真实 token 数"""
+
+    def test_openai_format(self):
+        resp = {"usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 100)
+        self.assertEqual(r["output_tokens"], 50)
+        self.assertEqual(r["source"], "openai")
+        self.assertEqual(r["confidence"], "high")
+
+    def test_anthropic_format(self):
+        resp = {"usage": {"input_tokens": 200, "output_tokens": 80}}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 200)
+        self.assertEqual(r["output_tokens"], 80)
+        self.assertEqual(r["source"], "anthropic")
+        self.assertEqual(r["confidence"], "high")
+
+    def test_gemini_format(self):
+        resp = {"usageMetadata": {"promptTokenCount": 300, "candidatesTokenCount": 120}}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 300)
+        self.assertEqual(r["output_tokens"], 120)
+        self.assertEqual(r["source"], "gemini")
+        self.assertEqual(r["confidence"], "high")
+
+    def test_flat_format(self):
+        resp = {"prompt_tokens": 50, "completion_tokens": 25}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 50)
+        self.assertEqual(r["output_tokens"], 25)
+        self.assertEqual(r["source"], "common_count_tokens")
+        self.assertEqual(r["confidence"], "high")
+
+    def test_empty_response(self):
+        r = extract_usage({})
+        self.assertEqual(r["confidence"], "none")
+        self.assertIn("error", r)
+
+    def test_not_a_dict(self):
+        r = extract_usage("not a dict")
+        self.assertEqual(r["confidence"], "none")
+
+    def test_openai_format_with_extra_fields(self):
+        """有额外字段不影响提取"""
+        resp = {"id": "chatcmpl-xxx", "model": "gpt-4o",
+                "usage": {"prompt_tokens": 150, "completion_tokens": 75, "total_tokens": 225},
+                "choices": [{"message": {"content": "hello"}}]}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 150)
+        self.assertEqual(r["output_tokens"], 75)
+        self.assertEqual(r["source"], "openai")
+
+    def test_prioritizes_openai_over_anthropic(self):
+        """同一个 response 同时包含两类字段时，OpenAI 格式优先"""
+        resp = {"usage": {"prompt_tokens": 10, "completion_tokens": 5,
+                          "input_tokens": 999, "output_tokens": 999}}
+        r = extract_usage(resp)
+        self.assertEqual(r["input_tokens"], 10)
+        self.assertEqual(r["output_tokens"], 5)
+        self.assertEqual(r["source"], "openai")
+
+    def test_response_keys_in_error(self):
+        """无法解析时返回顶层 key 供排查"""
+        resp = {"id": "abc", "object": "chat.completion", "created": 123}
+        r = extract_usage(resp)
+        self.assertEqual(r["confidence"], "none")
+        self.assertIn("response_keys", r)
+
+
+class TestRecordFromResponse(unittest.TestCase):
+
+    @patch("cost_tracker.LOG_FILE", new_callable=lambda: Path(tempfile.mktemp(suffix=".log")))
+    def test_record_from_openai(self, mock_path):
+        if mock_path.exists():
+            mock_path.unlink()
+        mock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        resp = {"usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}}
+        r = record_from_response(resp, "gpt-4o")
+        self.assertTrue(r["recorded"])
+        self.assertEqual(r["usage_source"], "openai")
+        self.assertGreater(r["cost_usd"], 0)
+
+        lines = mock_path.read_text().strip().split("\n")
+        self.assertGreaterEqual(len(lines), 1)
+        entry = json.loads(lines[0])
+        self.assertEqual(entry["input_tokens"], 100)
+        self.assertEqual(entry["output_tokens"], 50)
+        self.assertEqual(entry["usage_source"], "openai")
+        mock_path.unlink(missing_ok=True)
+
+    @patch("cost_tracker.LOG_FILE", new_callable=lambda: Path(tempfile.mktemp(suffix=".log")))
+    def test_record_from_empty_response(self, mock_path):
+        if mock_path.exists():
+            mock_path.unlink()
+        mock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        r = record_from_response({}, "unknown-model")
+        self.assertFalse(r["recorded"])
+        self.assertIsNone(r["usage_source"])
+        self.assertIn("error", r)
+        mock_path.unlink(missing_ok=True)

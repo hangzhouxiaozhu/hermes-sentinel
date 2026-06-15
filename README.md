@@ -108,11 +108,12 @@ Hermes 主循环
 
 ```python
 from guardian_core import (
-    guardian_tick,              # 每 10 分钟
-    guardian_on_api_call,       # API 调用后
-    guardian_on_skill_install,  # 安装 skill 前
-    get_notification,           # 检查是否有通知待推送
-    guardian_daily_report,      # 生成一句话日报
+    guardian_tick,                # 每 10 分钟
+    guardian_on_api_call,         # API 调用后（需传入 token 数）
+    guardian_on_api_response,     # API 返回后（自动解析响应体提取 token）
+    guardian_on_skill_install,    # 安装 skill 前
+    get_notification,             # 检查是否有通知待推送
+    guardian_daily_report,        # 生成一句话日报
 )
 ```
 

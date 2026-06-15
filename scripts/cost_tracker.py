@@ -194,10 +194,127 @@ def calc_cost(model, input_tokens, output_tokens):
 
 
 # ═══════════════════════════════════════════════════════════
-#  记录与汇总
+#  从 API 响应中提取真实 token 数
 # ═══════════════════════════════════════════════════════════
 
-def record(model, input_tokens, output_tokens, task_type="unknown") -> dict:
+def extract_usage(response: dict, model: str = "") -> dict:
+    """
+    从 API 返回体中提取真实的 token 消耗。
+
+    支持主流 AI 提供商的返回格式：
+    - OpenAI / DeepSeek / OpenRouter: response.usage.prompt_tokens + completion_tokens
+    - Anthropic: response.usage.input_tokens + output_tokens
+    - Google Gemini: response.usageMetadata.promptTokenCount + candidatesTokenCount
+    - 无法解析时返回 None
+
+    参数:
+        response: API 返回的完整 JSON 响应体（dict）
+        model: 模型名（可选，用于日志）
+
+    返回:
+    {
+        "input_tokens": int,     # 提取到的输入 token 数
+        "output_tokens": int,    # 提取到的输出 token 数
+        "source": str,           # 提取来源: "openai"|"anthropic"|"gemini"|"common_count_tokens"|None
+        "confidence": str,       # "high"|"low"
+    }
+    或
+    {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "source": None,
+        "confidence": "none",
+        "error": "无法从响应体中提取 token 数据",
+        "response_keys": [str]   # 响应体的顶层 key，便于排查
+    }
+    """
+    if not isinstance(response, dict):
+        return {"input_tokens": 0, "output_tokens": 0, "source": None,
+                "confidence": "none", "error": "response is not a dict"}
+
+    # ── 格式 1: OpenAI / DeepSeek / OpenRouter ──
+    # { "usage": { "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150 } }
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        inp = usage.get("prompt_tokens")
+        out = usage.get("completion_tokens")
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            return {"input_tokens": int(inp), "output_tokens": int(out),
+                    "source": "openai", "confidence": "high"}
+
+    # ── 格式 2: Anthropic ──
+    # { "usage": { "input_tokens": 100, "output_tokens": 50 } }
+    if isinstance(usage, dict):
+        inp = usage.get("input_tokens")
+        out = usage.get("output_tokens")
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            return {"input_tokens": int(inp), "output_tokens": int(out),
+                    "source": "anthropic", "confidence": "high"}
+
+    # ── 格式 3: Google Gemini ──
+    # { "usageMetadata": { "promptTokenCount": 100, "candidatesTokenCount": 50 } }
+    meta = response.get("usageMetadata")
+    if isinstance(meta, dict):
+        inp = meta.get("promptTokenCount")
+        out = meta.get("candidatesTokenCount")
+        if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+            return {"input_tokens": int(inp), "output_tokens": int(out),
+                    "source": "gemini", "confidence": "high"}
+
+    # ── 格式 4: 极简格式（某些自建 API） ──
+    # { "prompt_tokens": 100, "completion_tokens": 50 }
+    inp = response.get("prompt_tokens")
+    out = response.get("completion_tokens")
+    if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
+        return {"input_tokens": int(inp), "output_tokens": int(out),
+                "source": "common_count_tokens", "confidence": "high"}
+
+    # ── 无法解析 ──
+    return {"input_tokens": 0, "output_tokens": 0, "source": None,
+            "confidence": "none",
+            "error": "无法从响应体中提取 token 数据",
+            "response_keys": list(response.keys())[:10]}
+
+
+def record_from_response(response: dict, model: str, task_type: str = "unknown") -> dict:
+    """
+    从 API 响应体中提取 token 并记录费用。
+
+    这是推荐使用的入口——token 数来自真实响应，而非调用方估算。
+
+    参数:
+        response: API 返回的完整 JSON 响应体
+        model: 模型名称
+        task_type: 任务类型（可选）
+
+    返回:
+        {"recorded": bool, "over_budget": bool, "cost_usd": float,
+         "price_stale": bool, "usage_source": str|None}
+    """
+    usage = extract_usage(response, model)
+
+    if usage.get("confidence") == "high":
+        r = record(model=model, input_tokens=usage["input_tokens"],
+                   output_tokens=usage["output_tokens"], task_type=task_type,
+                   _usage_source=usage["source"])
+        r["usage_source"] = usage["source"]
+        return r
+
+    # 无法解析时仍然尝试记录，但标记为低置信度
+    inp = response.get("input_tokens") or response.get("prompt_tokens") or 0
+    out = response.get("output_tokens") or response.get("completion_tokens") or 0
+    if isinstance(inp, (int, float)) and isinstance(out, (int, float)) and (inp > 0 or out > 0):
+        r = record(model=model, input_tokens=int(inp), output_tokens=int(out),
+                   task_type=task_type, _usage_source="fallback_keys")
+        r["usage_source"] = "fallback_keys"
+        return r
+
+    return {"recorded": False, "over_budget": False, "cost_usd": 0,
+            "price_stale": is_price_table_stale()["stale"], "usage_source": None,
+            "error": "response contains no token usage data"}
+
+
+def record(model, input_tokens, output_tokens, task_type="unknown", _usage_source=None) -> dict:
     """
     记录一次 API 调用（静默写入日志）。
 
@@ -217,6 +334,8 @@ def record(model, input_tokens, output_tokens, task_type="unknown") -> dict:
         "cost_usd": cost,
         "task_type": task_type,
     }
+    if _usage_source:
+        entry["usage_source"] = _usage_source  # "openai"|"anthropic"|"gemini"|"fallback_keys"
 
     with open(LOG_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
