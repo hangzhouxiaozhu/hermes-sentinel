@@ -95,7 +95,6 @@ All Sentinel modules follow the same flow:
 | `scripts/cost_tracker.py` | Token usage logging + cost estimation |
 | `scripts/self_heal.py` | Skill integrity + log health checks |
 | `scripts/skill_auditor.py` | Pre-scan for secrets, dangerous commands, malware |
-| `scripts/config_manager.py` | Config conflict detection + recommendation |
 | `scripts/daily_report.py` | Daily report generator |
 | `cron/hardware-check.sh` | Cron tick entry point |
 | `cron/daily-backup.sh` | Cron daily report entry point |
@@ -110,7 +109,9 @@ All Sentinel modules follow the same flow:
 ```python
 from guardian_core import (
     guardian_tick,                # cron: hardware/network patrol every 10 min
+    guardian_before_user_message, # fuzzy input → clear instruction translation
     guardian_on_api_call,         # record API token usage (auto via plugin)
+    guardian_on_api_response,     # record token usage (from API response JSON)
     guardian_on_skill_install,    # [needs integration] pre-install security audit
     get_notification,             # check for pending notifications
     guardian_daily_report,        # generate one-line daily report
@@ -142,7 +143,6 @@ hermes-sentinel/
 │   ├── cost_tracker.py
 │   ├── self_heal.py
 │   ├── skill_auditor.py
-│   ├── config_manager.py
 │   └── daily_report.py
 ├── references/
 │   ├── memory-thresholds.md
@@ -151,12 +151,15 @@ hermes-sentinel/
 ├── templates/
 │   └── monitor-config.yaml
 └── tests/
-    ├── test_adaptive_understanding.py  # 24 tests
     ├── test_os_detect.py
     ├── test_skill_auditor.py
     ├── test_narrator.py
     ├── test_cost_tracker.py
-    ├── test_config_manager.py
+    ├── test_guardian_core.py
+    ├── test_hardware_monitor.py
+    ├── test_intent_translator.py
+    ├── test_network_noise.py
+    ├── test_self_heal.py
     └── test_plugin.py
 ```
 

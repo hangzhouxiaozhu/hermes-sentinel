@@ -54,11 +54,6 @@ try:
 except ImportError:
     intent_translator = None
 
-try:
-    import publish_archiver
-except ImportError:
-    publish_archiver = None
-
 # ── 自动安装插件（用户只需 cp -r 一次） ────────────────────
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -320,18 +315,12 @@ def guardian_on_skill_install(skill_path: str) -> dict:
         {"approved": bool, "reason": str | None}
         approved=False → Hermes 阻止安装
     """
-    import skill_auditor, config_manager
+    import skill_auditor
 
     # 安全审查
     audit = skill_auditor.scan(skill_path)
     if not audit["approved"]:
         return {"approved": False, "reason": audit.get("user_reason", "该 Skill 存在安全风险，已自动阻止。")}
-
-    # 配置冲突检测（只检测推荐，不写入）
-    try:
-        config_manager.detect_and_recommend(skill_path)
-    except Exception:
-        pass
 
     return {"approved": True, "reason": None}
 
@@ -399,58 +388,3 @@ def guardian_daily_report() -> str:
     elif not parts:
         return "今天一切正常。"
     return "。".join(parts) + "。"
-
-
-# ── 文章发布归档 ────────────────────────────────────────
-
-def guardian_archive_article(title: str, digest: str = "",
-                             platform: str = "wechat",
-                             article_id: str = "", url: str = "") -> dict:
-    """
-    记录一篇已发布的文章标题、摘要和日期。
-
-    调用方: Hermes 在每次成功发布公众号文章后调用。
-
-    返回:
-        {"recorded": True, "date": str, "title": str}
-    """
-    if publish_archiver:
-        try:
-            return publish_archiver.record(
-                title=title, digest=digest,
-                platform=platform, article_id=article_id, url=url
-            )
-        except Exception:
-            pass
-    return {"recorded": False, "date": None, "title": title}
-
-
-def guardian_list_articles(start_date: str = None,
-                           end_date: str = None) -> list[dict]:
-    """
-    按日期范围查询已归档文章。不传参数则返回全部。
-
-    返回:
-        [{date, title, digest, platform, ...}, ...]
-    """
-    if publish_archiver:
-        try:
-            if start_date and end_date:
-                return publish_archiver.get_by_date_range(start_date, end_date)
-            elif start_date:
-                return publish_archiver.get_by_date(start_date)
-            else:
-                return publish_archiver.list_all()
-        except Exception:
-            pass
-    return []
-
-
-def guardian_article_stats() -> dict:
-    """获取发布统计。"""
-    if publish_archiver:
-        try:
-            return publish_archiver.get_stats()
-        except Exception:
-            pass
-    return {"total": 0}
