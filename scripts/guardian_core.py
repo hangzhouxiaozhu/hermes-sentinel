@@ -105,18 +105,6 @@ def guardian_tick() -> dict:
         except Exception:
             pass
 
-    # 4. 价格表过期检查（每天最多提醒一次）
-    if cost_tracker:
-        try:
-            stale = cost_tracker.is_price_table_stale()
-            if stale.get("stale"):
-                notifications.append({
-                    "type": "price_stale",
-                    "context": stale,
-                })
-        except Exception:
-            pass
-
     # 5. 判定是否需要通知用户
     if notifications and narrator:
         return narrator.pick_notification(notifications)
@@ -129,16 +117,21 @@ def guardian_tick() -> dict:
 def guardian_on_api_call(model: str, input_tokens: int, output_tokens: int,
                          task_type: str = "unknown") -> dict:
     """
-    API 调用结束后自动记账（由调用方提供 token 数）。
+    API 调用结束后记录 token 消耗（由调用方提供 token 数）。
 
-    推荐使用 guardian_on_api_response()，数据更精准。
+    推荐使用 guardian_on_api_response()——从真实响应体提取 token，更精准。
+    不依赖任何价格表，中转 API 用户同样适用。
+
+    返回:
+        {"recorded": bool, "input_tokens": int, "output_tokens": int,
+         "cost_usd": float|None}  # cost_usd 仅在配置价格表后才有值
     """
     if cost_tracker:
         try:
             return cost_tracker.record(model, input_tokens, output_tokens, task_type)
         except Exception:
             pass
-    return {"recorded": False, "over_budget": False}
+    return {"recorded": False, "input_tokens": 0, "output_tokens": 0, "cost_usd": None}
 
 
 def guardian_on_api_response(response: dict, model: str,

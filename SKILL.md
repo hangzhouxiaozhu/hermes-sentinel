@@ -1,6 +1,6 @@
 ---
 name: hermes-sentinel
-description: 自适应指令理解（行业坐标系）+ 硬件监控、网络质量检测、成本记账、故障自愈、安全审查，全程自动无感运行
+description: 自适应指令理解（行业坐标系）+ 硬件监控、网络质量检测、Token 统计、故障自愈、安全审查，全程自动无感运行
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon
@@ -169,8 +169,8 @@ Hermes 每 10 分钟自动调用 `guardian_tick()`，执行：
 
 每次 API 调用完成后自动调用 `guardian_on_api_call()`：
 
-- 自动记录模型、Token、费用
-- 仅当今日费用超预算时通知用户
+- 自动记录模型、Token 消耗（来自 API 返回体，真实精准）
+- 仅有价格表时估算费用，否则只统计 Token
 
 ### 3. 安装 Skill 前（hook）
 

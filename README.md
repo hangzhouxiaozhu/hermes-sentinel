@@ -5,7 +5,7 @@
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux-yellow)]()
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue)]()
 
-**Hermes 的后台守护 skill** — 硬件监控、网络质量检测、成本记账、故障自愈、安全审查。全部自动运行，用户无感。
+**Hermes 的后台守护 skill** — 硬件监控、网络质量检测、Token 统计、故障自愈、安全审查。全部自动运行，用户无感。
 
 ## 核心亮点：自适应指令理解（行业坐标系）
 
@@ -71,9 +71,9 @@ Hermes 主循环
     │   │   └── (异常时) full check       → 诊断根因 + 建议
     │   └── self_heal.quick_check()       → 自动重试 / 通知
     │
-    ├── API 返回后 hook → guardian_core.guardian_on_api_response()  ← 推荐
-    │   └── cost_tracker.record_from_response() → 自动提取 token
-    │        或用 guardian_on_api_call() → 传入 token 数
+    ├── API 返回后 hook → guardian_core.guardian_on_api_response()  ← 通用
+    │   └── cost_tracker.record_from_response() → 自动提取 token（通用）
+    │        费用估算仅在有价格表时附加，中转 API 用户只用 token 统计
     │
     └── 安装 skill 前 hook → guardian_core.guardian_on_skill_install()
         ├── skill_auditor.scan()
@@ -84,9 +84,9 @@ Hermes 主循环
 
 ---
 
-## 成本记账集成指南
+## Token 统计集成指南
 
-成本记账需要 Hermes 主循环配合。两种方式：
+Token 统计需要 Hermes 主循环配合。token 数是核心功能，适用于所有 API 提供商和中转 API。
 
 ### 推荐方式：传入 API 响应体（自动提取 token）
 
