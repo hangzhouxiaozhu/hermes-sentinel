@@ -1,10 +1,10 @@
 # 模型成本参考表
 
-> ⚠️ **本文档仅供参考。价格表以 `scripts/cost_tracker.py` 中的 `MODEL_PRICES` 为准。**
->
-> 更新价格请修改 `cost_tracker.py` 中的 `MODEL_PRICES` 字典，并同步更新顶层 `PRICE_TABLE_INFO` 中的 `last_updated` 日期。
+价格表以 `scripts/cost_tracker.py` 中的 `MODEL_PRICES` 字典为准。
 
-价格单位：USD / 1K tokens。数据更新于 2026-06。
+> 价格数据更新于 **2026-06**。
+> 每季度至少检查一次各提供商定价页面，发现变化及时更新。
+> 如果你发现价格已过时，提 Issue 我会处理。
 
 ## DeepSeek
 
@@ -45,11 +45,11 @@
 |------|------|------|----------------|
 | grok-4 | $0.00200 | $0.00800 | ~$10.00 |
 
-## 如何贡献价格更新
+## 维护说明
 
-1. 在 `scripts/cost_tracker.py` 中找到 `MODEL_PRICES` 字典
-2. 修改对应模型的价格
-3. 更新 `PRICE_TABLE_INFO` 中的 `last_updated` 日期
-4. 提交 PR
+更新价格步骤：
 
-> 不知价格或有新模型？可在 GitHub Issue 中注明模型名称，我们会补充。
+1. 打开各提供商定价页面，核对 `MODEL_PRICES` 中的价格
+2. 修改 `cost_tracker.py` 中的对应值
+3. 将 `PRICE_TABLE_INFO["last_updated"]` 改为当前月份
+4. 提交 commit

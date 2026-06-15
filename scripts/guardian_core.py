@@ -105,7 +105,19 @@ def guardian_tick() -> dict:
         except Exception:
             pass
 
-    # 4. 判定是否需要通知用户
+    # 4. 价格表过期检查（每天最多提醒一次）
+    if cost_tracker:
+        try:
+            stale = cost_tracker.is_price_table_stale()
+            if stale.get("stale"):
+                notifications.append({
+                    "type": "price_stale",
+                    "context": stale,
+                })
+        except Exception:
+            pass
+
+    # 5. 判定是否需要通知用户
     if notifications and narrator:
         return narrator.pick_notification(notifications)
 

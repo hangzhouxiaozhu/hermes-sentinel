@@ -5,25 +5,35 @@ Hermes Sentinel — 成本记账模块
 被 guardian_core 调用，不直接输出到终端。
 
 价格表维护:
-  - 数据来源: 各 AI 提供商官方定价页面
-  - 更新记录见 PRICE_TABLE_INFO
-  - 价格会变化，请定期检查并更新
+  数据来源: 各 AI 提供商的官方定价页面，见 PROVIDER_SOURCES
+  更新方式: 调用 update_prices() 修改 PRICE_TABLE_INFO.last_updated
+  自动检测: 每次巡检检查是否过期，过期通知维护者
 """
 
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from collections import defaultdict
 
 # ── 价格表元信息 ──────────────────────────────────────────
-# 修改价格时请同时更新以下信息
+# 维护者每季度核对一次价格，修改时同步更新 last_updated
 PRICE_TABLE_INFO = {
     "last_updated": "2026-06",
-    "source": "各 AI 提供商官方定价页面 / OpenRouter 公开价格",
     "currency": "USD",
     "unit": "per 1K tokens",
     "models_count": 17,
-    "notes": "价格会随提供商调价而变化。发现过时时请提交 Issue 或 PR 更新。",
+    "latency_months": 3,  # 超过 3 个月未更新视为过期
+}
+
+# 各提供商官方定价页面（便于核对）
+PROVIDER_SOURCES = {
+    "deepseek": "https://api-docs.deepseek.com/quick_start/pricing",
+    "openai":   "https://openai.com/api/pricing/",
+    "anthropic":"https://www.anthropic.com/pricing",
+    "google":   "https://ai.google.dev/pricing",
+    "xai":      "https://console.x.ai/",
+    "mistral":  "https://mistral.ai/products/la-platform#pricing",
+    "kimi":     "https://platform.moonshot.cn/docs/pricing/chat",
 }
 
 # ── 配置 ──────────────────────────────────────────────────
@@ -66,22 +76,98 @@ MODEL_PRICES = {
 BUDGET_DAILY_USD = 0.50
 
 
-def get_price_table_info() -> dict:
-    """
-    返回价格表元信息（维护者用）。
+# ═══════════════════════════════════════════════════════════
+#  价格表生命周期管理
+# ═══════════════════════════════════════════════════════════
 
-    返回:
-        {"last_updated": str, "source": str, "currency": str, ...}
-    """
+def get_price_table_info() -> dict:
+    """返回价格表元信息"""
     return dict(PRICE_TABLE_INFO)
 
+
+def get_provider_sources() -> dict:
+    """返回各提供商官方定价页面 URL"""
+    return dict(PROVIDER_SOURCES)
+
+
+def is_price_table_stale() -> dict:
+    """
+    判断价格表是否已过期。
+
+    返回:
+    {
+        "stale": bool,              # True = 需要更新
+        "last_updated": str,         # 格式 "YYYY-MM"
+        "months_since_update": int,  # 距上次更新以来的月数
+        "latency_months": int,       # 容忍期
+        "recommended_update": str,   # 建议更新月份
+    }
+    """
+    lu = PRICE_TABLE_INFO["last_updated"]
+    try:
+        last = datetime.strptime(lu, "%Y-%m")
+    except (ValueError, TypeError):
+        return {"stale": True, "last_updated": lu, "months_since_update": 999,
+                "latency_months": PRICE_TABLE_INFO["latency_months"],
+                "recommended_update": datetime.now().strftime("%Y-%m")}
+
+    now = datetime.now()
+    elapsed = (now.year - last.year) * 12 + (now.month - last.month)
+    stale = elapsed > PRICE_TABLE_INFO["latency_months"]
+
+    return {
+        "stale": stale,
+        "last_updated": lu,
+        "months_since_update": elapsed,
+        "latency_months": PRICE_TABLE_INFO["latency_months"],
+        "recommended_update": now.strftime("%Y-%m"),
+    }
+
+
+def update_prices(new_prices: dict, updated_month: str = None) -> dict:
+    """
+    更新模型价格表。
+
+    参数:
+        new_prices: {model_name: {"input": float, "output": float}, ...}
+        updated_month: "YYYY-MM" 格式，默认当前月份
+
+    返回:
+        {"updated": int, "added": int, "total": int, "last_updated": str}
+    """
+    global MODEL_PRICES, PRICE_TABLE_INFO
+
+    updated = 0
+    added = 0
+
+    for name, price in new_prices.items():
+        if name in MODEL_PRICES:
+            updated += 1
+        else:
+            added += 1
+        MODEL_PRICES[name] = price
+
+    new_date = updated_month or datetime.now().strftime("%Y-%m")
+    PRICE_TABLE_INFO["last_updated"] = new_date
+    PRICE_TABLE_INFO["models_count"] = len(MODEL_PRICES)
+
+    return {
+        "updated": updated,
+        "added": added,
+        "total": len(MODEL_PRICES),
+        "last_updated": new_date,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+#  价格查询与计费
+# ═══════════════════════════════════════════════════════════
 
 def get_model_price(model_name):
     """
     获取模型价格，支持精确匹配和部分匹配。
 
     精确匹配优先 → 部分匹配降级 → unknown 模型用保守价格（flash 级）。
-    不使用最贵的模型作为默认，避免意外高估。
     """
     if model_name in MODEL_PRICES:
         return MODEL_PRICES[model_name]
@@ -91,13 +177,11 @@ def get_model_price(model_name):
         if key.lower() in model_lower or model_lower in key.lower():
             return price
 
-    # 未知模型: 使用 deepseek-v4-flash 价格（输入 $0.00014, 输出 $0.00055）
-    # 这是保守估计——未知模型大概率不会比已知模型便宜
     return MODEL_PRICES["deepseek-v4-flash"]
 
 
 def get_known_models() -> list:
-    """返回已知模型名称列表（给外部用）"""
+    """返回已知模型名称列表"""
     return sorted(MODEL_PRICES.keys())
 
 
@@ -109,12 +193,17 @@ def calc_cost(model, input_tokens, output_tokens):
     return round(input_cost + output_cost, 6)
 
 
+# ═══════════════════════════════════════════════════════════
+#  记录与汇总
+# ═══════════════════════════════════════════════════════════
+
 def record(model, input_tokens, output_tokens, task_type="unknown") -> dict:
     """
     记录一次 API 调用（静默写入日志）。
 
     返回:
-        {"recorded": bool, "over_budget": bool, "cost_usd": float}
+        {"recorded": bool, "over_budget": bool, "cost_usd": float,
+         "price_stale": bool}  # price_stale 供 guardian_core 判断
     """
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -132,11 +221,11 @@ def record(model, input_tokens, output_tokens, task_type="unknown") -> dict:
     with open(LOG_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    # 检查是否超预算
     today_cost = _today_cost()
     over = today_cost > BUDGET_DAILY_USD
+    stale = is_price_table_stale()["stale"]
 
-    return {"recorded": True, "over_budget": over, "cost_usd": cost}
+    return {"recorded": True, "over_budget": over, "cost_usd": cost, "price_stale": stale}
 
 
 def _today_cost() -> float:
@@ -159,6 +248,10 @@ def _today_cost() -> float:
                 continue
     return total
 
+
+# ═══════════════════════════════════════════════════════════
+#  报表输出
+# ═══════════════════════════════════════════════════════════
 
 def get_daily_summary(target_date=None) -> dict:
     """获取指定日期的汇总（结构化，给 guardian_core/日志用）"""
@@ -211,7 +304,8 @@ def get_user_friendly_summary() -> str:
     """
     生成一句话成本摘要（给 narrator 用）。
 
-    示例: "今天花了 0.08 美元。"
+    返回:
+        str — 如有过时价格表，追加在末尾
     """
     today = get_daily_summary()
     if today["total_calls"] == 0:
@@ -220,8 +314,13 @@ def get_user_friendly_summary() -> str:
     cost = today["total_cost_usd"]
     calls = today["total_calls"]
 
+    stale = is_price_table_stale()
+    suffix = ""
+    if stale["stale"]:
+        suffix = f"（注意：价格表上次更新于 {stale['last_updated']}，已有 {stale['months_since_update']} 个月，费用可能不准确）"
+
     if cost >= BUDGET_DAILY_USD:
-        return f"今天 API 花了 ${cost:.2f}，快到预算了（${BUDGET_DAILY_USD:.2f}）。"
+        return f"今天 API 花了 ${cost:.2f}，快到预算了（${BUDGET_DAILY_USD:.2f}）。{suffix}"
     if cost >= BUDGET_DAILY_USD * 0.5:
-        return f"今天花了 ${cost:.4f} 美元（已到预算的一半）。"
-    return f"花了 ${cost:.4f} 美元。"
+        return f"今天花了 ${cost:.4f} 美元（已到预算的一半）。{suffix}"
+    return f"花了 ${cost:.4f} 美元。{suffix}"

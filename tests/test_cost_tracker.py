@@ -10,7 +10,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from cost_tracker import (
-    get_price_table_info, get_known_models,
+    get_price_table_info, get_provider_sources,
+    is_price_table_stale, update_prices,
+    get_known_models,
     get_model_price, calc_cost, record,
     get_daily_summary, get_user_friendly_summary,
     MODEL_PRICES, BUDGET_DAILY_USD,
@@ -21,15 +23,77 @@ class TestPriceTableInfo(unittest.TestCase):
 
     def test_has_metadata(self):
         info = get_price_table_info()
-        for key in ("last_updated", "source", "currency", "models_count"):
+        for key in ("last_updated", "currency", "models_count", "latency_months"):
             self.assertIn(key, info)
 
     def test_last_updated_format(self):
         info = get_price_table_info()
         self.assertRegex(info["last_updated"], r"\d{4}-\d{2}")
 
+    def test_latency_months_exists(self):
+        info = get_price_table_info()
+        self.assertIn("latency_months", info)
+        self.assertGreater(info["latency_months"], 0)
 
-class TestKnownModels(unittest.TestCase):
+
+class TestProviderSources(unittest.TestCase):
+
+    def test_returns_dict(self):
+        sources = get_provider_sources()
+        self.assertIsInstance(sources, dict)
+        self.assertGreater(len(sources), 0)
+
+    def test_urls_start_with_https(self):
+        sources = get_provider_sources()
+        for name, url in sources.items():
+            self.assertTrue(url.startswith("https://"), f"{name}: {url}")
+
+
+class TestIsPriceTableStale(unittest.TestCase):
+
+    def test_returns_structure(self):
+        result = is_price_table_stale()
+        for key in ("stale", "last_updated", "months_since_update",
+                     "latency_months", "recommended_update"):
+            self.assertIn(key, result)
+
+    def test_stale_is_bool(self):
+        result = is_price_table_stale()
+        self.assertIn(result["stale"], (True, False))
+
+    def test_recommended_update_format(self):
+        result = is_price_table_stale()
+        self.assertRegex(result["recommended_update"], r"\d{4}-\d{2}")
+
+
+class TestUpdatePrices(unittest.TestCase):
+
+    def test_update_existing(self):
+        result = update_prices({"deepseek-chat": {"input": 1, "output": 2}})
+        self.assertGreaterEqual(result["updated"], 1)
+        # 还原
+        update_prices({"deepseek-chat": {"input": 0.00014, "output": 0.00028}})
+
+    def test_add_new(self):
+        result = update_prices({"new-test-model": {"input": 0.001, "output": 0.002}})
+        self.assertGreaterEqual(result["added"], 1)
+
+    def test_updates_last_updated(self):
+        update_prices({"dummy": {"input": 0.001, "output": 0.002}}, updated_month="2099-12")
+        info = get_price_table_info()
+        self.assertEqual(info["last_updated"], "2099-12")
+        # 还原
+        update_prices({}, updated_month="2026-06")
+        # 删除测试用的 dummy
+        MODEL_PRICES.pop("dummy", None)
+
+    def test_models_count_updated(self):
+        old_count = get_price_table_info()["models_count"]
+        update_prices({"test-abc": {"input": 0.001, "output": 0.002}})
+        info = get_price_table_info()
+        self.assertEqual(info["models_count"], old_count + 1)
+        MODEL_PRICES.pop("test-abc", None)
+        update_prices({})
 
     def test_returns_list(self):
         models = get_known_models()
@@ -93,6 +157,9 @@ class TestRecord(unittest.TestCase):
         self.assertTrue(result["recorded"])
         self.assertIn("cost_usd", result)
         self.assertIn("over_budget", result)
+        # 返回值应包含 price_stale 字段（True 或 False）
+        self.assertIn("price_stale", result)
+        self.assertIn(result["price_stale"], (True, False))
 
         # 验证日志文件已被写入
         self.assertTrue(mock_path.exists())

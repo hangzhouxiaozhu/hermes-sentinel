@@ -19,13 +19,14 @@ THROTTLE_LOG = HERMES_HOME / "cache" / "guardian" / "notif_throttle.json"
 # ── 通知频率限制 ──────────────────────────────────────────
 
 NOTIFICATION_LIMITS = {
-    "hardware_warn":      {"daily_max": 3, "cooldown_sec": 3600},  # 1 小时冷却
-    "hardware_danger":    {"daily_max": 5, "cooldown_sec": 900},   # 15 分钟冷却
-    "health_warn":        {"daily_max": 3, "cooldown_sec": 1800},  # 30 分钟冷却
+    "hardware_warn":      {"daily_max": 3, "cooldown_sec": 3600},
+    "hardware_danger":    {"daily_max": 5, "cooldown_sec": 900},
+    "health_warn":        {"daily_max": 3, "cooldown_sec": 1800},
     "health_danger":      {"daily_max": 3, "cooldown_sec": 900},
     "cost_budget":        {"daily_max": 2, "cooldown_sec": 0},
-    "network_issue":      {"daily_max": 4, "cooldown_sec": 1800},  # 30 分钟冷却
-    "network_restored":   {"daily_max": 2, "cooldown_sec": 3600},  # 1 小时冷却
+    "price_stale":        {"daily_max": 1, "cooldown_sec": 0},     # 每天最多一次
+    "network_issue":      {"daily_max": 4, "cooldown_sec": 1800},
+    "network_restored":   {"daily_max": 2, "cooldown_sec": 3600},
     "skill_blocked":      {"daily_max": 1, "cooldown_sec": 0},
 }
 
@@ -52,6 +53,9 @@ MESSAGE_TEMPLATES = {
     },
     "network_restored": {
         "normal": lambda ctx: "网恢复了，可以继续用了。",
+    },
+    "price_stale": {
+        "normal": lambda ctx: _describe_price_stale(ctx),
     },
     "skill_blocked": {
         "normal": lambda ctx: _describe_skill_blocked(ctx),
@@ -139,6 +143,24 @@ def _describe_cost(ctx) -> str:
     if over:
         return f"今天 API 花了 ${cost:.2f} 了，快到预算了。"
     return f"今天用了 {calls} 次，花了 ${cost:.4f} 美元。"
+
+
+def _describe_price_stale(ctx) -> str:
+    """价格表过期 → 人话（只对维护者说）"""
+    months = ctx.get("months_since_update", 0)
+    lu = ctx.get("last_updated", "?")
+    sources = None
+    try:
+        from . import cost_tracker
+        sources = cost_tracker.get_provider_sources()
+    except Exception:
+        pass
+
+    msg = f"价格表已有 {months} 个月没更新了（上次更新于 {lu}），当前计费可能不准确。"
+    if sources:
+        urls = "\n".join(f"- {name}: {url}" for name, url in sorted(sources.items()))
+        msg += f"\n核对链接：\n{urls}"
+    return msg
 
 
 def _describe_network_issue(ctx) -> str:
@@ -298,8 +320,9 @@ def pick_notification(notifications: list) -> dict:
     # 按紧急程度排序：danger > warn > 其他
     urgency_order = {"hardware_danger": 0, "health_danger": 1,
                      "hardware_warn": 2, "health_warn": 3,
-                     "network_issue": 4, "cost_budget": 5, "skill_blocked": 6,
-                     "network_restored": 7}
+                     "network_issue": 4, "cost_budget": 5,
+                     "price_stale": 6, "skill_blocked": 7,
+                     "network_restored": 8}
     notifications.sort(key=lambda n: urgency_order.get(n.get("type", ""), 99))
 
     for notif in notifications:
