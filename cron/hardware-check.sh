@@ -1,7 +1,9 @@
 #!/bin/bash
 # Hermes Sentinel — 定时巡检（每 10 分钟）
 # 由 install.sh 安装时自动配置 cron
-# 如果在 cron 环境下找不到 python3，尝试常见路径
+# cron 环境 PATH 很短，显式设置以保证找到系统命令
+
+export PATH="/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "/usr/bin/python3")
 SKILL_DIR="$HOME/.hermes/skills/system/hermes-sentinel"

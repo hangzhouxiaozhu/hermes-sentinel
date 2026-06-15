@@ -2,6 +2,8 @@
 # Hermes Sentinel — 每日巡检 + 日报（建议每天 9 点）
 # 由 install.sh 安装时自动配置 cron
 
+export PATH="/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
+
 PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "/usr/bin/python3")
 SKILL_DIR="$HOME/.hermes/skills/system/hermes-sentinel"
 
