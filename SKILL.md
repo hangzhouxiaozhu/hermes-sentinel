@@ -1,6 +1,6 @@
 ---
 name: hermes-sentinel
-description: 硬件监控、网络质量检测、Token 统计、故障自愈、安全审查，全程自动无感运行
+description: 自适应指令理解（行业坐标系）+ 硬件监控、网络质量检测、Token 统计、故障自愈、安全审查，全程自动无感运行
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon
@@ -12,7 +12,10 @@ triggers:
   - type: hook
     event: after_api_call
     handler: guardian_on_api_call
-tags: [monitoring, network, cost-tracking, self-healing, security]
+  - type: hook
+    event: before_user_message
+    handler: guardian_before_user_message
+tags: [adaptive-understanding, monitoring, network, cost-tracking, self-healing, security]
 ---
 
 # Hermes Guardian · 无感守护者
@@ -36,6 +39,48 @@ Hermes Guardian 是一个**后台守护 skill**。它对用户完全透明——
    "我刚才试了 XXX 没成功，
    你方便的时候能 YYY 吗？"
 ```
+
+---
+
+## 自适应指令理解（行业坐标系）
+
+当用户输入短/模糊时，Sentinel 通过 4 层引擎识别场景并生成专业重构方案。
+
+### 触发条件
+
+- 输入 ≤8 个字且不含具体宾语
+- 输入在模糊词表中（太暗、乱码、不好看、继续、改一下……）
+
+### 处理流程
+
+```
+"太暗"
+   ↓
+① is_ambiguous_instruction() → True
+   ↓
+② context_resolver → 从文件/消息/skill 提取信号词
+   ↓  匹配：公众号 + 封面 + 渲染 → new_media_visual_design
+③ industry_profiles → 模糊术语表 → "提升亮度、对比度"
+   ↓
+④ build_rewrite_plan() → {
+       rewritten_instruction: "优化当前公众号封面亮度与移动端可读性…",
+       standards_used: [mobile_readability, thumbnail_legibility],
+       search_queries: ["公众号封面设计 移动端 可读性 2026"],
+   }
+```
+
+### 内置行业（第一版）
+
+| 行业 | 示例模糊词 |
+|------|-----------|
+| 新媒体视觉设计 | 太暗、不好看、太乱 |
+| 社交媒体内容运营 | 没人看、数据差 |
+| 软件工程 | 乱码、报错、跑不起来 |
+| AI 运维 | 太贵、太慢 |
+| 文档写作 | 太啰嗦、太短 |
+| 数据分析 | 看不出、不对 |
+
+> **集成：** 需要 Hermes 主循环调用 `guardian_before_user_message()` 作为前置 hook。
 
 ### 什么时候出声
 
