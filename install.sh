@@ -32,7 +32,15 @@ cp "$SOURCE_DIR/SKILL.md" "$SKILL_DIR/"
 [ -d "$SOURCE_DIR/templates" ] && cp -r "$SOURCE_DIR/templates" "$SKILL_DIR/"
 [ -d "$SOURCE_DIR/references" ] && cp -r "$SOURCE_DIR/references" "$SKILL_DIR/"
 chmod +x "$SKILL_DIR/cron/"*.sh
-echo "✅ 文件复制完成"
+echo "✅ 技能文件复制完成"
+
+# ── 安装 Hermes 插件（自动记录 token） ──
+if [ -d "$SOURCE_DIR/plugin" ]; then
+    PLUGIN_DIR="$HOME/.hermes/plugins/hermes-sentinel"
+    mkdir -p "$PLUGIN_DIR"
+    cp "$SOURCE_DIR/plugin/"* "$PLUGIN_DIR/" 2>/dev/null
+    echo "✅ Hermes plugin 已安装到 ~/.hermes/plugins/hermes-sentinel/（自动记录每次 API 调用的 token 消耗）"
+fi
 
 # ── 创建日志和缓存目录 ──
 mkdir -p "$HOME/.hermes/logs"

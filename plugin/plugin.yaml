@@ -1,0 +1,6 @@
+name: hermes-sentinel
+version: 2.0.0
+description: "Token usage tracker — records every LLM call's prompt/completion tokens via the post_api_request hook. Works with all providers (OpenAI, Anthropic, DeepSeek, OpenRouter, proxies)."
+author: Hermes Sentinel
+hooks:
+  - post_api_request
