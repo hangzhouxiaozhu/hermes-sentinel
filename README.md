@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS-lightgrey)]()
+[![Platform: Linux](https://img.shields.io/badge/Platform-Linux-yellow)]()
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue)]()
 
 **Hermes 的后台守护 skill** — 硬件监控、网络质量检测、成本记账、故障自愈、安全审查、隐私隔离。全部自动运行，用户无感。
 
@@ -53,6 +55,7 @@ Hermes 主循环
 |------|------|
 | `scripts/guardian_core.py` | 中央协调器，暴露 4 个 hook/tick 入口 |
 | `scripts/narrator.py` | 机器数据 → 人话 + 通知节流 |
+| `scripts/os_detect.py` | 跨平台适配层（macOS / Linux / Windows） |
 | `scripts/hardware_monitor.py` | 硬件数据采集 + 自动修复 |
 | `scripts/network_monitor.py` | 网络质量检测（代理/VPN/DNS/网关/公网） |
 | `scripts/cost_tracker.py` | Token 费用记账 |
@@ -96,6 +99,7 @@ hermes-guardian/
 ├── scripts/
 │   ├── guardian_core.py
 │   ├── narrator.py
+│   ├── os_detect.py          # 跨平台适配（macOS/Linux/Windows）
 │   ├── hardware_monitor.py
 │   ├── network_monitor.py
 │   ├── cost_tracker.py
