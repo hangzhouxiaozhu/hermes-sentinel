@@ -7,43 +7,6 @@
 
 **Hermes 的后台守护 skill** — 硬件监控、网络质量检测、Token 统计、故障自愈、安全审查。全部自动运行，用户无感。
 
-## 核心亮点：自适应指令理解（行业坐标系）
-
-这是 Sentinel 最核心的能力。当用户输入 ≤5 个字或指向模糊时，不走"对齐 skill 标准"的机械路线，而是三步专业重构：
-
-```
-"太暗"
-   │
-   ▼
-① 行业定位 → 判断任务所属领域（公众号封面 → 新媒体视觉设计）
-   │
-   ▼
-② 标准调取 → 三源交叉验证
-   ├─ web_search("微信公众号封面设计最佳实践 2026")
-   ├─ skill 已沉淀的用户专业标准
-   └─ 模型训练数据中的行业共识
-   │
-   ▼
-③ 专业重构 → 输出含设计原理的完整方案，而非"亮度+20"
-```
-
-**示例：**
-
-| 用户说 | 对齐 skill 的机械做法 | Sentinel 的行业坐标系做法 |
-|--------|---------------------|------------------------|
-| "太暗" | 查到 #fdfcf9 → 换上 | 先搜行业标准 → 确认 #fdfcf9 是对的 → 加移动端 0.3s 视觉锚点原理 → 输出含金边竖线的完整方案 |
-| "乱码" | 查到 `ensure_ascii=False` → 补上 | 搜微信 API 最佳实践 → 还发现 `charset=utf-8 header` → 一起修 |
-| 未知场景 | 无 skill → 退回通用回答 | 现场搜索行业标准 → 构建临时坐标系 → 输出专业方案 |
-
-**关键区别：**
-
-| 对齐 skill 标准 | 行业坐标系（Sentinel） |
-|----------------|---------------------|
-| skill 写死"你试出来的正确答案" | skill 写死答案 + web_search 补行业当前最优解题思路 |
-| 只做"查表替换" | 先确认 skill 的标准符合行业共识 |
-| 未知场景投降 | 现场搜索建坐标，不投降 |
-| 输出"亮度+20" | 输出含设计原理的完整方案 |
-
 ## 设计原则
 
 > **先自动解决，解决不了再请用户帮忙。**
@@ -90,53 +53,11 @@ Sentinel 所有模块遵循同样的流程：
 
 ---
 
-## Token 统计集成指南
-
-Token 统计需要 Hermes 主循环配合。token 数是核心功能，适用于所有 API 提供商和中转 API。
-
-### 推荐方式：传入 API 响应体（自动提取 token）
-
-Hermes 每次 API 调用拿到返回体后，调用 `guardian_on_api_response()`：
-
-```python
-from hermes_sentinel.guardian_core import guardian_on_api_response
-
-# 假设 response 是 API 返回的完整 JSON
-response = openai.chat.completions.create(model="gpt-4o", ...)
-
-# 传入原始响应体，cost_tracker 自己提取 token 数
-guardian_on_api_response(
-    response=response.model_dump(),  # 原始响应体
-    model="gpt-4o",
-)
-```
-
-支持自动提取的响应格式：
-
-| 提供商 | 提取字段 |
-|--------|---------|
-| OpenAI / DeepSeek | `response.usage.prompt_tokens` + `completion_tokens` |
-| Anthropic | `response.usage.input_tokens` + `output_tokens` |
-| Google Gemini | `response.usageMetadata.promptTokenCount` + `candidatesTokenCount` |
-| 通用平铺格式 | `response.prompt_tokens` + `completion_tokens` |
-
-### 备选方式：传入 token 数
-
-```python
-guardian_on_api_call(model="gpt-4o", input_tokens=100, output_tokens=50)
-```
-
-### 效果
-
-接入后，每次 API 调用自动记录到 `~/.hermes/logs/model_cost.log`，每日汇总在日报中体现，超预算时 narrator 自动提醒。
-
----
-
 ## 文件说明
 
 | 文件 | 用途 |
 |------|------|
-| `scripts/guardian_core.py` | 中央协调器，暴露 3 个 hook/tick 入口 |
+| `scripts/guardian_core.py` | 中央协调器，暴露 tick/API/安装 入口 |
 | `scripts/narrator.py` | 机器数据 → 人话 + 通知节流 |
 | `scripts/os_detect.py` | 跨平台适配层（macOS / Linux / Windows） |
 | `scripts/hardware_monitor.py` | 硬件数据采集 + 自动修复 |
@@ -157,10 +78,9 @@ guardian_on_api_call(model="gpt-4o", input_tokens=100, output_tokens=50)
 
 ```python
 from guardian_core import (
-    guardian_tick,                # 每 10 分钟
-    guardian_on_api_call,         # API 调用后（需传入 token 数）
-    guardian_on_api_response,     # API 返回后（自动解析响应体提取 token）
-    guardian_on_skill_install,    # 安装 skill 前
+    guardian_tick,                # cron: 每 10 分钟硬件/网络巡检
+    guardian_on_api_call,         # 记录 API token 消耗（插件自动调用）
+    guardian_on_skill_install,    # [需集成] 安装 skill 前安全审查
     get_notification,             # 检查是否有通知待推送
     guardian_daily_report,        # 生成一句话日报
 )
