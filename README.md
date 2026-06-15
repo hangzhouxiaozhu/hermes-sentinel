@@ -1,4 +1,4 @@
-# Hermes Guardian · 无感守护者
+# Hermes Sentinel · 无感守护者
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS-lightgrey)]()
@@ -9,13 +9,13 @@
 
 > **先自动解决，解决不了再请用户帮忙。**
 
-Guardian 所有模块遵循同样的流程：
+Sentinel 所有模块遵循同样的流程：
 1. 问题发生时，先尝试自动修复
 2. 修复不了，等几秒重试（可能是短暂抖动）
 3. 还不行，评估是否需要用户操作
 4. 确实需要用户配合 → 说清楚"我试了什么、你方便做什么"
 
-目标：用户 95% 的情况下不知道 Guardian 的存在。
+目标：用户 95% 的情况下不知道 Sentinel 的存在。
 
 > 与 Hermes 边界清晰：本 skill 只做 Hermes 本身不具备的能力。
 
@@ -118,7 +118,7 @@ hermes-guardian/
 
 ## Privacy Notice
 
-Hermes Guardian 在用户本地运行，**不收集、不上传、不分享任何个人数据**。
+Hermes Sentinel 在用户本地运行，**不收集、不上传、不分享任何个人数据**。
 
 ### 本 skill 在本地检测什么
 

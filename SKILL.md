@@ -1,5 +1,5 @@
 ---
-name: hermes-guardian
+name: hermes-sentinel
 description: 后台守护 — 硬件监控、网络质量检测、成本记账、故障自愈、隐私保护，全程自动无感运行
 version: 2.0.0
 author: Hermes Agent
