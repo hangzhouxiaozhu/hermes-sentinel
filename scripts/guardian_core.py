@@ -6,7 +6,6 @@ Hermes Guardian — 守护核心（中央协调器）
 
 调用方：
   - Cron → guardian_tick()         每 N 分钟
-  - Hermes hook → before_outbound() 联网前
   - Hermes hook → on_api_call()     每次 API 调用后
   - Hermes hook → on_skill_install() 安装 Skill 前
   - Hermes 主循环 → get_notification() 检查是否有通知待推送
@@ -36,11 +35,6 @@ try:
     from . import self_heal
 except ImportError:
     self_heal = None
-
-try:
-    from . import privacy_guard
-except ImportError:
-    privacy_guard = None
 
 try:
     from . import narrator
@@ -118,26 +112,6 @@ def guardian_tick() -> dict:
         return narrator.pick_notification(notifications)
 
     return {"notify": False, "message": None, "urgency": "none"}
-
-
-# ── 联网传输前 hook ──────────────────────────────────────
-
-def guardian_before_outbound(data) -> dict:
-    """
-    联网传输前自动过滤隐私字段。
-
-    参数:
-        data: 待传输的文本 / dict / list
-
-    返回:
-        {"filtered": bool, "data": data}
-    """
-    if privacy_guard:
-        try:
-            return privacy_guard.filter_outgoing_data(data)
-        except Exception:
-            pass
-    return {"filtered": False, "data": data}
 
 
 # ── API 调用后 hook ──────────────────────────────────────

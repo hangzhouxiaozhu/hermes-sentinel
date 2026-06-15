@@ -1,6 +1,6 @@
 ---
 name: hermes-sentinel
-description: 后台守护 — 硬件监控、网络质量检测、成本记账、故障自愈、隐私保护，全程自动无感运行
+description: 后台守护 — 硬件监控、网络质量检测、成本记账、故障自愈、安全审查，全程自动无感运行
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon
@@ -10,15 +10,12 @@ triggers:
     interval: 600
     handler: guardian_tick
   - type: hook
-    event: before_outbound
-    handler: guardian_before_outbound
-  - type: hook
     event: after_api_call
     handler: guardian_on_api_call
   - type: hook
     event: on_skill_install
     handler: guardian_on_skill_install
-tags: [monitoring, network, cost-tracking, self-healing, security, privacy]
+tags: [monitoring, network, cost-tracking, self-healing, security]
 ---
 
 # Hermes Guardian · 无感守护者
@@ -85,22 +82,14 @@ Hermes 每 10 分钟自动调用 `guardian_tick()`，执行：
   - 正常 → 沉默
   - 断连 → 自动重试 3 次，成功后沉默；失败后通知用户
 
-### 2. 联网传输前（hook）
-
-每次联网前自动调用 `guardian_before_outbound()`：
-
-- 自动过滤手机号、身份证号、银行卡号、邮箱
-- 用户无感，不影响正常使用
-- 不删除数据中的字段，只脱敏值
-
-### 3. API 调用后（hook）
+### 2. API 调用后（hook）
 
 每次 API 调用完成后自动调用 `guardian_on_api_call()`：
 
 - 自动记录模型、Token、费用
 - 仅当今日费用超预算时通知用户
 
-### 4. 安装 Skill 前（hook）
+### 3. 安装 Skill 前（hook）
 
 安装新 Skill 前自动调用 `guardian_on_skill_install()`：
 
@@ -121,7 +110,6 @@ Hermes 每 10 分钟自动调用 `guardian_tick()`，执行：
 | 4 | 故障自愈 | 每 10 分钟 | ✅ |
 | 5 | Skill 安全审查 | 安装 Skill 前 | ✅ 仅被阻止时 |
 | 6 | 配置冲突检测 | 安装 Skill 前 | ✅ 从不 |
-| 7 | 隐私隔离 | 每次联网前 | ✅ 从不 |
 
 ---
 
@@ -171,7 +159,6 @@ Guardian 不做 CLI 工具。所有功能被动触发。
 | `self_heal.log` | 故障恢复记录 |
 | `network_monitor.log` | 网络诊断记录 |
 | `skill_audit.log` | Skill 审查记录 |
-| `privacy_guard.log` | 隐私操作记录 |
 
 ---
 
