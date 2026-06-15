@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import os_detect
+import os_detect
 
 # ── 配置 ──────────────────────────────────────────────────
 HERMES_HOME = Path(os.path.expanduser("~/.hermes"))

@@ -22,27 +22,27 @@ FLAG_FILE = CACHE_DIR / "notification.json"
 # ── 导入各子模块（静默方式） ──────────────────────────────
 
 try:
-    from . import hardware_monitor
+    import hardware_monitor
 except ImportError:
     hardware_monitor = None
 
 try:
-    from . import cost_tracker
+    import cost_tracker
 except ImportError:
     cost_tracker = None
 
 try:
-    from . import self_heal
+    import self_heal
 except ImportError:
     self_heal = None
 
 try:
-    from . import narrator
+    import narrator
 except ImportError:
     narrator = None
 
 try:
-    from . import network_monitor
+    import network_monitor
 except ImportError:
     network_monitor = None
 
@@ -175,7 +175,7 @@ def guardian_on_skill_install(skill_path: str) -> dict:
         {"approved": bool, "reason": str | None}
         approved=False → Hermes 阻止安装
     """
-    from . import skill_auditor, config_manager
+    import skill_auditor, config_manager
 
     # 安全审查
     audit = skill_auditor.scan(skill_path)

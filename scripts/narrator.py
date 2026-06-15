@@ -151,7 +151,7 @@ def _describe_price_stale(ctx) -> str:
     lu = ctx.get("last_updated", "?")
     sources = None
     try:
-        from . import cost_tracker
+        import cost_tracker
         sources = cost_tracker.get_provider_sources()
     except Exception:
         pass

@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-from . import os_detect
+import os_detect
 
 HERMES_HOME = Path.home() / ".hermes"
 LOG_FILE = HERMES_HOME / "logs" / "network_monitor.log"
