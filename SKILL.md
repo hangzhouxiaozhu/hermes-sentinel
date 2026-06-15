@@ -213,4 +213,4 @@ All logs in `~/.hermes/logs/` (JSONL format, for admin troubleshooting), **no co
 cp -r hermes-sentinel ~/.hermes/skills/system/
 ```
 
-After installation, Sentinel activates automatically via Hermes's hook and tick mechanisms. No additional configuration needed.
+That's it. The first cron patrol (within 10 minutes) will automatically install the Hermes plugin for token tracking. No extra steps needed.

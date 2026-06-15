@@ -51,6 +51,37 @@ try:
 except ImportError:
     intent_translator = None
 
+# ── 自动安装插件（用户只需 cp -r 一次） ────────────────────
+
+PLUGIN_SOURCE = Path(__file__).resolve().parent.parent / "plugin"
+PLUGIN_TARGET = HERMES_HOME / "plugins" / "hermes-sentinel"
+_PLUGIN_INSTALLED = False
+
+
+def _ensure_plugin_installed() -> bool:
+    """Auto-install Hermes plugin from skill directory on first tick.
+
+    User only needs to ``cp -r`` the skill directory.  No manual
+    ``install.sh`` or plugin copy step required.
+    """
+    global _PLUGIN_INSTALLED
+    if _PLUGIN_INSTALLED:
+        return True
+    if PLUGIN_TARGET.exists() and (PLUGIN_TARGET / "__init__.py").exists():
+        _PLUGIN_INSTALLED = True
+        return True
+    if not PLUGIN_SOURCE.exists():
+        return False
+    try:
+        import shutil
+        PLUGIN_TARGET.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(str(PLUGIN_SOURCE), str(PLUGIN_TARGET), dirs_exist_ok=True)
+        _PLUGIN_INSTALLED = True
+        return True
+    except Exception:
+        return False
+
+
 # ── 用户消息前置 hook ──────────────────────────────────────
 
 def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
@@ -118,6 +149,9 @@ def guardian_tick() -> dict:
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     notifications = []
+
+    # 自动安装插件（如果尚未安装）
+    _ensure_plugin_installed()
 
     # 1. 硬件监控
     if hardware_monitor:
