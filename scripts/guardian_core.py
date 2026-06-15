@@ -46,6 +46,41 @@ try:
 except ImportError:
     network_monitor = None
 
+try:
+    import adaptive_understanding
+except ImportError:
+    adaptive_understanding = None
+
+# ── 用户消息前置 hook ──────────────────────────────────────
+
+def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
+    """
+    用户消息前置 hook — 模糊指令检测 + 专业重构。
+
+    SKILL.md 声明的 before_user_message handler。
+    在 Hermes 主循环处理用户输入前调用。
+
+    参数:
+        user_input: 用户原始输入
+        context: 会话上下文 dict
+
+    返回:
+        {"action": "pass"|"rewrite", "input": str, "original_input": str, "metadata": dict}
+    """
+    if adaptive_understanding:
+        try:
+            return adaptive_understanding.guardian_before_user_message(user_input, context or {})
+        except Exception:
+            pass
+    return {
+        "action": "pass",
+        "input": user_input,
+        "original_input": user_input,
+        "metadata": {"should_rewrite": False,
+                     "error": "adaptive_understanding unavailable"},
+    }
+
+
 # ── 定时巡检 ──────────────────────────────────────────────
 
 def guardian_tick() -> dict:

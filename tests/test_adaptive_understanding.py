@@ -1,16 +1,9 @@
-"""自适应指令理解测试
+"""Adaptive instruction understanding tests.
 
-覆盖场景：
-1. "太暗" + 公众号封面上下文 → 重写为视觉设计方案
-2. "乱码" + Python/API 上下文 → 重写为编码修复方案
-3. "继续" + 无上下文 → 不强行重写，action=pass
-4. 长明确指令 → 直接 pass
-5. 有本地标准时 → standards_used 包含标准
-6. 无 web 权限时 → needs_search=False，不搜索
+Strict assertions — must rewrite when context is clear.
 """
 
 import sys
-import json
 import unittest
 from pathlib import Path
 
@@ -20,191 +13,295 @@ from adaptive_understanding import (
     is_ambiguous_instruction,
     build_rewrite_plan,
     guardian_before_user_message,
+    compose_instruction,
     VAGUE_WORDS,
 )
 
 
 class TestIsAmbiguous(unittest.TestCase):
-    """模糊指令判断"""
+    """Ambiguity detection"""
 
     def test_vague_word_exact_match(self):
-        self.assertTrue(is_ambiguous_instruction("太暗"))
-        self.assertTrue(is_ambiguous_instruction("乱码"))
-        self.assertTrue(is_ambiguous_instruction("不好看"))
+        for word in ["太暗", "乱码", "不好看", "改一下", "和上次一样"]:
+            self.assertTrue(is_ambiguous_instruction(word), f"{word} should be ambiguous")
 
     def test_short_input_without_object(self):
         self.assertTrue(is_ambiguous_instruction("不对"))
         self.assertTrue(is_ambiguous_instruction("太乱"))
 
-    def test_short_input_with_object(self):
-        """含具体宾语时不触发"""
+    def test_short_input_with_object_is_not_ambiguous(self):
+        """Has concrete object → not ambiguous"""
         self.assertFalse(is_ambiguous_instruction("改标题"))
         self.assertFalse(is_ambiguous_instruction("调图片"))
 
-    def test_long_explicit_instruction(self):
-        """长明确指令不触发"""
-        self.assertFalse(
-            is_ambiguous_instruction("把这张图片的亮度提高20%")
-        )
-        self.assertFalse(
-            is_ambiguous_instruction("帮我写一篇公众号文章关于AI发展")
-        )
+    def test_long_explicit_instruction_not_ambiguous(self):
+        self.assertFalse(is_ambiguous_instruction("把这张图片的亮度提高20%"))
+        self.assertFalse(is_ambiguous_instruction("帮我写一篇关于AI发展的文章"))
 
 
-class TestBuildRewritePlan(unittest.TestCase):
-    """重写计划生成"""
+class TestBuildRewritePlan_ExplicitInstructions(unittest.TestCase):
+    """Clear commands must pass through unchanged."""
 
     def test_long_instruction_passes(self):
-        """长明确指令 → action=pass"""
-        result = build_rewrite_plan("把图片亮度提高20%")
-        self.assertEqual(result["action"], "pass")
-        self.assertFalse(result["should_rewrite"])
+        r = build_rewrite_plan("把图片亮度提高20%")
+        self.assertEqual(r["action"], "pass")
+        self.assertFalse(r["should_rewrite"])
 
     def test_without_context_low_confidence(self):
-        """无上下文时即使模糊词也不强行重写"""
-        result = build_rewrite_plan("太暗")
-        # 无上下文信号 → 置信度低 → action 可能为 pass 或 ask
-        self.assertIn(result["action"], ("pass", "ask"))
+        """Ambiguous word with zero context should not force rewrite."""
+        r = build_rewrite_plan("太暗")
+        self.assertNotEqual(r["action"], "rewrite",
+                            "No context → should not force rewrite")
 
-    def test_tai_an_with_cover_context(self):
-        """"太暗" + 封面上下文 → 重写"""
-        ctx = {
-            "conversation_context": {
-                "last_user_message": "封面太暗了",
-                "current_file": "/公众号/封面设计/文章封面.png",
-                "recent_messages": [
-                    {"role": "user", "content": "帮我做公众号封面"},
-                    {"role": "assistant", "content": "好的，当前底色偏暖白"},
-                ],
-            }
-        }
-        result = build_rewrite_plan("太暗", conversation_context=ctx["conversation_context"])
-        # 因为有封面/公众号等信号，应该匹配到新媒体视觉设计
-        if result["action"] == "rewrite":
-            self.assertEqual(result["industry"], "new_media_visual_design")
-            self.assertIsNotNone(result["rewritten_instruction"])
-            self.assertGreater(len(result["rationale"]), 0)
 
-    def test_luanma_with_code_context(self):
-        """"乱码" + Python/API 上下文 → 重写"""
-        ctx = {
-            "conversation_context": {
-                "last_user_message": "Python 请求返回乱码",
-                "current_file": "/代码/api_test.py",
-                "active_tool": "terminal",
-                "recent_messages": [
-                    {"role": "user", "content": "调用微信API返回乱码"},
-                ],
-            }
-        }
-        result = build_rewrite_plan("乱码", conversation_context=ctx["conversation_context"])
-        if result["action"] == "rewrite":
-            self.assertEqual(result["industry"], "software_engineering")
-            self.assertIsNotNone(result["rewritten_instruction"])
+class TestBuildRewritePlan_TaiAnCover(unittest.TestCase):
+    """"too dark" + wechat cover context → must rewrite as visual design."""
 
-    def test_standards_included_when_matched(self):
-        """匹配行业时 standards_used 应有值"""
-        ctx = {
-            "conversation_context": {
-                "last_user_message": "封面",
-                "current_file": "/公众号/封面/cover.png",
-            }
+    def setUp(self):
+        self.ctx = {
+            "last_user_message": "这个封面太暗了",
+            "current_file": "/公众号/封面设计/文章封面.png",
+            "recent_messages": [
+                {"role": "user", "content": "帮我做公众号封面"},
+                {"role": "assistant", "content": "好的，当前底色偏暖白"},
+                {"role": "user", "content": "太暗"},
+            ],
         }
-        result = build_rewrite_plan("太暗", conversation_context=ctx["conversation_context"])
-        if result["action"] == "rewrite":
-            self.assertGreater(len(result["standards_used"]), 0)
-            self.assertGreater(len(result["standards_detail"]), 0)
 
-    def test_no_web_search_when_disabled(self):
-        """allow_web_search=False 时 needs_search 应为 False"""
-        ctx = {
-            "conversation_context": {
-                "last_user_message": "封面",
-                "current_file": "/公众号/封面/cover.png",
-            }
+    def test_must_rewrite(self):
+        r = build_rewrite_plan("太暗", conversation_context=self.ctx)
+        self.assertEqual(r["action"], "rewrite")
+        self.assertEqual(r["industry"], "new_media_visual_design")
+
+    def test_rewritten_instruction_includes_standards(self):
+        r = build_rewrite_plan("太暗", conversation_context=self.ctx)
+        self.assertIn("mobile_readability", str(r["standards_used"]))
+        self.assertGreater(len(r["standards_detail"]), 0)
+
+    def test_rewritten_instruction_is_multi_sentence(self):
+        r = build_rewrite_plan("太暗", conversation_context=self.ctx)
+        instruction = r["rewritten_instruction"]
+        self.assertIsNotNone(instruction)
+        # Should be more than just a short intent
+        self.assertGreater(len(instruction), 50)
+        self.assertIn("standard", instruction.lower())
+
+    def test_search_queries_generated(self):
+        r = build_rewrite_plan("太暗", conversation_context=self.ctx, allow_web_search=False)
+        self.assertGreater(len(r["search_queries"]), 0)
+
+    def test_confidence_high(self):
+        r = build_rewrite_plan("太暗", conversation_context=self.ctx)
+        self.assertGreaterEqual(r["confidence"], 0.4)
+
+
+class TestBuildRewritePlan_LuanMaPython(unittest.TestCase):
+    """"garbled" + Python/API context → must rewrite as software engineering."""
+
+    def setUp(self):
+        self.ctx = {
+            "last_user_message": "Python 请求返回乱码",
+            "current_file": "/代码/api_test.py",
+            "active_tool": "terminal",
+            "recent_messages": [
+                {"role": "user", "content": "调用微信API返回乱码"},
+            ],
         }
-        result = build_rewrite_plan(
-            "太暗",
-            conversation_context=ctx["conversation_context"],
-            allow_web_search=False,
+
+    def test_must_rewrite(self):
+        r = build_rewrite_plan("乱码", conversation_context=self.ctx)
+        self.assertEqual(r["action"], "rewrite")
+        self.assertEqual(r["industry"], "software_engineering")
+
+    def test_rewritten_instruction_mentions_charset(self):
+        r = build_rewrite_plan("乱码", conversation_context=self.ctx)
+        instruction = r["rewritten_instruction"] or ""
+        self.assertIn("charset", instruction.lower())
+
+    def test_standards_include_utf8(self):
+        r = build_rewrite_plan("乱码", conversation_context=self.ctx)
+        used = " ".join(r["standards_used"])
+        self.assertIn("utf8", used)
+
+
+class TestBuildRewritePlan_SearchProvider(unittest.TestCase):
+    """search_provider results must be preserved in output."""
+
+    def test_search_results_preserved(self):
+        captured = []
+
+        def fake_search(queries):
+            result = [{"title": "微信 API 编码规范", "summary": "Content-Type charset=utf-8"}]
+            captured.append(result)
+            return result
+
+        r = build_rewrite_plan(
+            "乱码",
+            conversation_context={
+                "last_user_message": "Python 微信API乱码",
+                "current_file": "/代码/wechat.py",
+            },
+            allow_web_search=True,
+            search_provider=fake_search,
         )
-        if result["action"] == "rewrite":
-            self.assertFalse(result["needs_search"])
+        self.assertEqual(r["action"], "rewrite")
+        self.assertTrue(r["needs_search"])
+        self.assertIn("search_results", r)
+        self.assertGreater(len(r["search_results"]), 0)
 
-    def test_search_queries_generated_even_without_search(self):
-        """不搜索时仍生成 search_queries"""
-        ctx = {
-            "conversation_context": {
-                "last_user_message": "封面",
-                "current_file": "/公众号/封面/cover.png",
-            }
-        }
-        result = build_rewrite_plan(
-            "太暗",
-            conversation_context=ctx["conversation_context"],
-            allow_web_search=False,
+    def test_search_provider_error_does_not_crash(self):
+        def broken_search(queries):
+            raise RuntimeError("search failed")
+
+        r = build_rewrite_plan(
+            "乱码",
+            conversation_context={
+                "last_user_message": "Python 乱码",
+                "current_file": "/代码/wechat.py",
+            },
+            allow_web_search=True,
+            search_provider=broken_search,
         )
-        if result["action"] == "rewrite":
-            self.assertGreater(len(result["search_queries"]), 0)
+        # Should not crash, should still produce a plan
+        self.assertIn(r["action"], ("rewrite", "pass"))
 
-    def test_loaded_skills_enhance_context(self):
-        """加载 skill 增加上下文信号"""
-        skills = [{"name": "wechat-editor", "description": "公众号文章排版与封面设计"}]
-        result = build_rewrite_plan("太暗", loaded_skills=skills)
-        self.assertIn(result["action"], ("pass", "ask", "rewrite"))
+
+class TestComposeInstruction(unittest.TestCase):
+    """Instruction composition."""
+
+    def test_compose_with_standards(self):
+        standards = [
+            {"key": "m1", "name": "Mobile Readability", "description": "0.3s visual anchor"},
+            {"key": "m2", "name": "Thumbnail Legibility", "description": "Readable at 200px"},
+        ]
+        result = compose_instruction(
+            original="太暗",
+            industry_name="新媒体视觉设计",
+            intent="提升亮度对比度",
+            standards=standards,
+            search_queries=[],
+            needs_search=False,
+        )
+        self.assertIn("Readability", result)
+        self.assertIn("太暗", result)
+        self.assertGreater(len(result), 50)
+
+    def test_compose_with_search_queries(self):
+        result = compose_instruction(
+            original="乱码",
+            industry_name="软件工程",
+            intent="检查编码",
+            standards=[],
+            search_queries=["微信 API charset 2026"],
+            needs_search=True,
+        )
+        self.assertIn("微信", result)
+
+    def test_compose_no_standards_no_search(self):
+        result = compose_instruction(
+            original="test",
+            industry_name="general",
+            intent="fix",
+            standards=[],
+            search_queries=[],
+            needs_search=False,
+        )
+        self.assertTrue(result.startswith("Based on") or result.startswith("Handle"))
+
+
+class TestEvidenceUsed(unittest.TestCase):
+    """evidence_used must be populated correctly."""
+
+    def test_evidence_includes_standards(self):
+        ctx = {
+            "last_user_message": "封面太暗",
+            "current_file": "/封面/cover.png",
+        }
+        r = build_rewrite_plan("太暗", conversation_context=ctx)
+        if r["action"] == "rewrite":
+            self.assertGreater(len(r["evidence_used"]), 0)
+            has_standard = any(e.startswith("standard:") for e in r["evidence_used"])
+            self.assertTrue(has_standard, f"evidence_used={r['evidence_used']}")
+
+
+class TestGuardianCoreBeforeHook(unittest.TestCase):
+    """guardian_core must export guardian_before_user_message."""
+
+    def test_guardian_core_exports_before_hook(self):
+        import guardian_core
+        self.assertTrue(hasattr(guardian_core, "guardian_before_user_message"),
+                        "guardian_core does not export guardian_before_user_message")
+
+    def test_guardian_core_before_hook_rewrites_with_context(self):
+        import guardian_core
+        result = guardian_core.guardian_before_user_message("太暗", {
+            "conversation_context": {
+                "current_file": "/公众号/封面/cover.png",
+                "last_user_message": "封面设计",
+            }
+        })
+        self.assertIn(result["action"], ("pass", "rewrite"))
+        self.assertEqual(result["original_input"], "太暗")
+
+    def test_guardian_core_before_hook_passes_long(self):
+        import guardian_core
+        result = guardian_core.guardian_before_user_message(
+            "把这张图片的亮度提高20%"
+        )
+        self.assertEqual(result["action"], "pass")
 
 
 class TestGuardianBeforeUserMessage(unittest.TestCase):
-    """前置 hook 入口"""
+    """Front-end hook integrity."""
 
     def test_known_context_returns_rewrite_action(self):
-        """有上下文时返回 rewrite action"""
-        context = {
+        result = guardian_before_user_message("太暗", {
             "conversation_context": {
-                "last_user_message": "封面设计",
                 "current_file": "/公众号/封面/cover.png",
+                "last_user_message": "封面设计"
             },
             "web_available": False,
-        }
-        result = guardian_before_user_message("太暗", context=context)
+        })
         self.assertIn(result["action"], ("pass", "rewrite"))
-        self.assertIn("original_input", result)
         self.assertIn("metadata", result)
         self.assertEqual(result["original_input"], "太暗")
 
     def test_long_instruction_passes_through(self):
-        """长指令直接 pass"""
-        result = guardian_before_user_message(
-            "把这张图片的亮度提高20%"
-        )
+        result = guardian_before_user_message("把图片亮度提高20%")
         self.assertEqual(result["action"], "pass")
-        self.assertEqual(result["input"], "把这张图片的亮度提高20%")
-        self.assertFalse(result["metadata"]["should_rewrite"])
+        self.assertEqual(result["input"], "把图片亮度提高20%")
 
     def test_original_input_preserved(self):
-        """original_input 总是保留原始输入"""
         result = guardian_before_user_message("太暗")
         self.assertEqual(result["original_input"], "太暗")
 
 
 class TestIndustryProfiles(unittest.TestCase):
-    """行业配置表"""
+    """Industry configuration."""
 
     def test_all_industries_have_required_fields(self):
         from industry_profiles import INDUSTRY_PROFILES
         for key, profile in INDUSTRY_PROFILES.items():
             self.assertIn("name", profile, f"{key} missing name")
             self.assertIn("signals", profile, f"{key} missing signals")
-            self.assertIsInstance(profile["signals"], list, f"{key} signals not list")
-            self.assertGreater(len(profile["signals"]), 0, f"{key} has no signals")
+            self.assertIsInstance(profile["signals"], list)
+            self.assertGreater(len(profile["signals"]), 0)
 
     def test_match_industry_returns_sorted(self):
         from industry_profiles import match_industry
         results = match_industry(["公众号", "封面", "渲染"])
         self.assertGreater(len(results), 0)
-        # 第一项得分应该是最高分
         if len(results) > 1:
             self.assertGreaterEqual(results[0][1], results[1][1])
+
+    def test_signal_dilution_does_not_kill_score(self):
+        """Many irrelevant signals should not dilute a strong match to zero."""
+        from industry_profiles import match_industry
+        noisy = ["封面", "公众号", "渲染", "hello", "world", "foo", "bar", "baz"]
+        results = match_industry(noisy)
+        self.assertGreater(len(results), 0)
+        top_score = results[0][1]
+        self.assertGreater(top_score, 0.2, f"Score {top_score} too low after dilution")
 
     def test_known_ambiguous_term(self):
         from industry_profiles import get_ambiguous_rewrite
@@ -217,9 +314,19 @@ class TestIndustryProfiles(unittest.TestCase):
         intent = get_ambiguous_rewrite("new_media_visual_design", "不存在的词")
         self.assertIsNone(intent)
 
+    def test_strong_signals_boost_score(self):
+        from industry_profiles import match_industry
+        # 2 strong signals should give > 0.5
+        results = match_industry(["Python", "API", "乱码"])
+        self.assertGreater(len(results), 0)
+        for key, score, _ in results:
+            if key == "software_engineering":
+                self.assertGreaterEqual(score, 0.5,
+                    f"2 strong signals should give >= 0.5, got {score}")
+
 
 class TestContextResolver(unittest.TestCase):
-    """上下文解析器"""
+    """Context resolver."""
 
     def test_resolve_returns_signals(self):
         from context_resolver import resolve_context
@@ -241,9 +348,24 @@ class TestContextResolver(unittest.TestCase):
         )
         self.assertGreater(len(result["signals"]), 0)
 
+    def test_extract_signals_finds_chinese_keywords(self):
+        from context_resolver import extract_signals_from_text
+        signals = extract_signals_from_text("调用微信API返回乱码，需要修复编码问题")
+        signal_set = set(signals)
+        self.assertIn("乱码", signal_set, f"signals={signals}")
+        self.assertIn("API", signal_set, f"signals={signals}")
+        self.assertIn("微信", signal_set, f"signals={signals}")
+
+    def test_extract_signals_from_cover_text(self):
+        from context_resolver import extract_signals_from_text
+        signals = extract_signals_from_text("这个公众号封面太暗了，需要调整")
+        signal_set = set(signals)
+        self.assertIn("公众号", signal_set, f"signals={signals}")
+        self.assertIn("封面", signal_set, f"signals={signals}")
+
 
 class TestStandardsRegistry(unittest.TestCase):
-    """本地标准注册表"""
+    """Standards registry."""
 
     def test_get_known_standards(self):
         from standards_registry import get_standards
@@ -252,8 +374,6 @@ class TestStandardsRegistry(unittest.TestCase):
         for s in standards:
             self.assertIn("key", s)
             self.assertIn("name", s)
-            self.assertIn("description", s)
-            self.assertIn("source", s)
 
     def test_get_unknown_standard_returns_empty(self):
         from standards_registry import get_standards

@@ -1,7 +1,8 @@
-"""自适应指令理解 — 总入口。
+"""Adaptive instruction understanding — main entry point.
 
-当用户输入短/模糊时，判断是否需要专业重构。
-整合 context_resolver、industry_profiles、standards_registry 三个模块。
+When user input is short or ambiguous, determines whether a professional
+rewrite is needed. Integrates context_resolver, industry_profiles, and
+standards_registry.
 """
 
 from typing import Any, Callable, Optional
@@ -10,46 +11,70 @@ import context_resolver
 import industry_profiles
 import standards_registry
 
-# 触发模糊判断的规则阈值
-MIN_CONFIDENCE_FOR_REWRITE = 0.4  # 上下文置信度 >= 此值时自动重写
-MIN_CONFIDENCE_FOR_ASK = 0.2      # >= 此值但 < 重写阈值时，要求用户澄清
-SHORT_INPUT_THRESHOLD = 8         # 输入 <= 此长度视为短输入
+# Thresholds
+MIN_CONFIDENCE_FOR_REWRITE = 0.4
+MIN_CONFIDENCE_FOR_ASK = 0.2
+SHORT_INPUT_THRESHOLD = 8
 
-# 常见模糊词汇（精确匹配）
+# Ambiguous words (exact match)
 VAGUE_WORDS: set[str] = {
     "太暗", "太亮", "乱码", "继续", "不对", "不好看", "太乱",
     "改一下", "和上次一样", "再看看", "优化", "太贵", "太慢",
     "太啰嗦", "太短", "没人看", "数据差", "没流量", "跑不起来",
-    "看不出", "太乱", "不对齐",
+    "看不出", "不对齐",
 }
 
 
 def is_ambiguous_instruction(text: str) -> bool:
-    """
-    判断用户输入是否为模糊指令。
-
-    规则：
-    1. 输入在模糊词表中（精确匹配）
-    2. 输入 <= SHORT_INPUT_THRESHOLD 且不包含具体宾语词
-
-    返回 True 表示需要进一步分析。
-    """
+    """Return True if the input is short/ambiguous and may need rewriting."""
     stripped = text.strip()
-
-    # 精确匹配模糊词
     if stripped in VAGUE_WORDS:
         return True
-
-    # 短输入且不含具体宾语
     if len(stripped) <= SHORT_INPUT_THRESHOLD:
         concrete_objects = {"文件", "图片", "代码", "标题", "表格", "页面",
                             "封面", "文章", "报告", "脚本", "数据", "邮件",
                             "文档", "笔记", "配置", "模型", "API"}
-        has_object = any(obj in stripped for obj in concrete_objects)
-        if not has_object:
+        if not any(obj in stripped for obj in concrete_objects):
             return True
-
     return False
+
+
+def compose_instruction(
+    original: str,
+    industry_name: str,
+    intent: Optional[str],
+    standards: list[dict],
+    search_queries: list[str],
+    needs_search: bool,
+) -> str:
+    """
+    Build a complete, actionable instruction from intent + standards + search.
+
+    Returns a multi-sentence instruction string, not a single-line patch.
+    """
+    lines: list[str] = []
+
+    if intent:
+        lines.append(f"Based on the current scenario ({industry_name}), address the user's concern: 「{original}」.")
+        lines.append(f"Objective: {intent}.")
+    else:
+        lines.append(f"Handle the user's input 「{original}」 within the {industry_name} context.")
+
+    if standards:
+        lines.append("Follow these standards during execution:")
+        for s in standards[:3]:
+            lines.append(f"  - {s['name']}: {s['description']}")
+
+    if search_queries:
+        if needs_search:
+            lines.append("Before executing, verify against current industry best practices:")
+        else:
+            lines.append("If online verification is available, reference these directions:")
+        for q in search_queries[:2]:
+            lines.append(f"  - {q}")
+
+    lines.append("Output must be a complete, actionable plan — not a single parameter adjustment.")
+    return "\n".join(lines)
 
 
 def build_rewrite_plan(
@@ -60,68 +85,50 @@ def build_rewrite_plan(
     search_provider: Optional[Callable] = None,
 ) -> dict:
     """
-    判断是否需要重写用户输入，返回结构化 rewrite plan。
+    Decide whether to rewrite the user input, return a structured rewrite plan.
 
-    参数:
-        user_input: 用户原始输入
-        conversation_context: Hermes 提供的会话上下文
-        loaded_skills: 已加载 skill 列表
-        allow_web_search: 是否允许联网搜索
-        search_provider: 外部搜索函数（由调用方注入）
-
-    返回:
+    Returns:
     {
-        "should_rewrite": bool,       # 是否需要重写
-        "action": str,                # "rewrite" | "ask" | "pass"
-        "industry": str | None,       # 匹配到的行业 key
-        "industry_name": str | None,  # 行业中文名
-        "confidence": float,          # 行业匹配置信度
-        "original": str,              # 用户原始输入
-        "rewritten_instruction": str | None,  # 重写后的完整指令
-        "rationale": list[str],       # 重写理由
-        "needs_search": bool,         # 是否建议搜索
-        "search_queries": list[str],  # 建议的搜索词
-        "standards_used": list[str],  # 用到的标准 key
-        "standards_detail": list[dict],  # 标准详情
+        "should_rewrite": bool,
+        "action": "rewrite" | "ask" | "pass",
+        "industry": str | None,
+        "industry_name": str | None,
+        "confidence": float,
+        "original": str,
+        "rewritten_instruction": str | None,
+        "rationale": [str],
+        "needs_search": bool,
+        "search_queries": [str],
+        "search_results": [dict],
+        "standards_used": [str],
+        "standards_detail": [dict],
+        "evidence_used": [str],
     }
     """
-    # ── 第一步：判断是否为模糊指令 ──
+    # ── Step 1: Ambiguity check ──
     if not is_ambiguous_instruction(user_input):
-        return {
-            "should_rewrite": False,
-            "action": "pass",
-            "industry": None,
-            "industry_name": None,
-            "confidence": 0.0,
-            "original": user_input,
-            "rewritten_instruction": None,
-            "rationale": [],
-            "needs_search": False,
-            "search_queries": [],
-            "standards_used": [],
-            "standards_detail": [],
-        }
+        return _empty_plan(user_input)
 
-    # ── 第二步：解析上下文 ──
+    # ── Step 2: Resolve context ──
     ctx = context_resolver.resolve_context(
         conversation_context=conversation_context,
         loaded_skills=loaded_skills,
     )
 
-    # ── 第三步：匹配行业和模糊术语 ──
+    # ── Step 3: Match industry and ambiguous term ──
     top_industry = ctx["possible_industries"][0] if ctx["possible_industries"] else None
     industry_key = top_industry[0] if top_industry else None
     industry_name = top_industry[2] if top_industry else None
     confidence = ctx["confidence"]
 
-    # ── 第四步：查找行业特定改写 ──
+    # ── Step 4: Look up industry-specific rewrite intent ──
     rewritten_intent = None
     if industry_key:
         rewritten_intent = industry_profiles.get_ambiguous_rewrite(industry_key, user_input.strip())
 
-    # ── 第五步：加载本地标准 ──
-    standards_detail = []
-    standards_used = []
+    # ── Step 5: Load local standards ──
+    standards_detail: list[dict] = []
+    standards_used: list[str] = []
     if industry_key:
         profile = industry_profiles.get_industry(industry_key)
         standard_keys = profile.get("local_standards", []) if profile else []
@@ -129,59 +136,80 @@ def build_rewrite_plan(
         for s in standards_detail:
             standards_used.append(s["key"])
 
-    # ── 第六步：构建重写指令 ──
+    # ── Step 6: Build instruction and search ──
     rewritten_instruction = None
     rationale: list[str] = []
     needs_search = False
     search_queries: list[str] = []
+    search_results: list[dict] = []
 
     if industry_key and confidence >= MIN_CONFIDENCE_FOR_REWRITE:
         if rewritten_intent:
-            rewritten_instruction = rewritten_intent
-            rationale.append(f"匹配行业「{industry_name}」中的模糊术语")
+            rationale.append(f"Matched industry '{industry_name}', fuzzy term resolved")
         else:
-            rewritten_instruction = (
-                f"根据当前「{industry_name}」场景，"
-                f"优化处理：{user_input}"
-            )
-            rationale.append(f"推断为「{industry_name}」场景")
+            rationale.append(f"Inferred '{industry_name}' scenario from context signals")
 
         if standards_detail:
             std_names = [s["name"] for s in standards_detail]
-            rationale.append(f"参考本地标准：{'、'.join(std_names[:3])}")
+            rationale.append(f"Referenced local standards: {', '.join(std_names[:3])}")
 
-        rationale.append(f"上下文信号词：{', '.join(ctx['signals'][:5])}")
+        signals = ctx.get("signals", [])
+        if signals:
+            rationale.append(f"Context signals: {', '.join(signals[:5])}")
 
-        # 搜索
-        profile = industry_profiles.get_industry(industry_key)
+        # Generate search queries
+        profile = industry_profiles.get_industry(industry_key) if industry_key else None
         if profile and profile.get("search_templates"):
             needs_search = allow_web_search
             templates = profile["search_templates"]
-            platform = ctx.get("current_file") or "默认"
+            platform = ctx.get("current_file") or "default"
             for tmpl in templates:
                 query = tmpl.replace("{platform}", str(platform).replace("_", " "))
                 query = query.replace("{api_name}", str(platform))
                 query = query.replace("{language}", "python")
                 query = query.replace("{issue}", user_input)
-                query = query.replace("{doc_type}", industry_name or "文档")
-                query = query.replace("{chart_type}", "数据图表")
+                query = query.replace("{doc_type}", industry_name or "document")
+                query = query.replace("{chart_type}", "data chart")
                 query = query.replace("{model}", user_input)
                 query = query.replace("{provider}", user_input)
                 search_queries.append(query + " 2026")
 
+            # Execute search if provider is available
             if needs_search and search_provider:
                 try:
-                    search_provider(search_queries)
-                except Exception:
-                    pass
+                    raw = search_provider(search_queries)
+                    if isinstance(raw, list):
+                        search_results = raw
+                    elif isinstance(raw, dict):
+                        search_results = [raw]
+                except Exception as exc:
+                    search_results = [{"error": str(exc)}]
 
-    # ── 第七步：决定动作 ──
+        # Build full instruction using compose_instruction()
+        rewritten_instruction = compose_instruction(
+            original=user_input,
+            industry_name=industry_name or "unknown",
+            intent=rewritten_intent,
+            standards=standards_detail,
+            search_queries=search_queries,
+            needs_search=needs_search,
+        )
+
+    # ── Step 7: Decide action ──
     if industry_key and confidence >= MIN_CONFIDENCE_FOR_REWRITE:
         action = "rewrite"
     elif industry_key and confidence >= MIN_CONFIDENCE_FOR_ASK:
         action = "ask"
     else:
         action = "pass"
+
+    # ── Build evidence list ──
+    evidence_used = [f"standard:{s['key']}" for s in standards_detail]
+    if search_results:
+        for sr in search_results[:3]:
+            title = sr.get("title") or sr.get("name") or sr.get("url", "")
+            if title:
+                evidence_used.append(f"search:{title[:60]}")
 
     return {
         "should_rewrite": action == "rewrite",
@@ -194,26 +222,42 @@ def build_rewrite_plan(
         "rationale": rationale,
         "needs_search": needs_search,
         "search_queries": search_queries[:3],
+        "search_results": search_results[:5],
         "standards_used": standards_used,
         "standards_detail": standards_detail,
+        "evidence_used": evidence_used,
+    }
+
+
+def _empty_plan(user_input: str) -> dict:
+    return {
+        "should_rewrite": False,
+        "action": "pass",
+        "industry": None,
+        "industry_name": None,
+        "confidence": 0.0,
+        "original": user_input,
+        "rewritten_instruction": None,
+        "rationale": [],
+        "needs_search": False,
+        "search_queries": [],
+        "search_results": [],
+        "standards_used": [],
+        "standards_detail": [],
+        "evidence_used": [],
     }
 
 
 def guardian_before_user_message(user_input: str, context: Optional[dict] = None) -> dict:
     """
-    用户消息前置 hook — 在 Hermes 主循环中调用。
+    Pre-process hook for user messages — called by Hermes main loop.
 
-    参数:
-        user_input: 用户原始输入
-        context: 会话上下文，至少包含 loaded_skills、web_available 等
+    Args:
+        user_input: Original user input string
+        context: Session context, may contain conversation_context, loaded_skills, web_available
 
-    返回:
-    {
-        "action": "pass" | "rewrite",
-        "input": str,           # 重写后的输入（或原始输入）
-        "original_input": str,  # 原始输入
-        "metadata": dict,       # rewrite_plan 完整信息
-    }
+    Returns:
+        {"action": "pass" | "rewrite", "input": str, "original_input": str, "metadata": dict}
     """
     ctx = context or {}
     result = build_rewrite_plan(

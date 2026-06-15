@@ -4,6 +4,17 @@
 """
 from typing import Optional
 
+# Signals that strongly indicate a specific industry (not generic).
+# Used to boost confidence in match_industry().
+STRONG_SIGNALS = {
+    "new_media_visual_design": {"封面", "海报", "公众号", "渲染", "缩略图", "banner", "头图"},
+    "social_media_content": {"小红书", "种草", "笔记", "抖音", "视频号"},
+    "software_engineering": {"代码", "报错", "乱码", "API", "Python", "JSON", "编码", "git", "bug"},
+    "ai_operations": {"token", "模型", "provider", "deepseek", "openai", "claude"},
+    "document_writing": {"PPT", "周报", "报告", "文档", "提纲", "邮件"},
+    "data_analysis": {"表格", "报表", "图表", "可视化", "CSV", "Excel", "SQL"},
+}
+
 INDUSTRY_PROFILES = {
     "new_media_visual_design": {
         "name": "新媒体视觉设计",
@@ -137,17 +148,34 @@ def get_industry(industry_key: str) -> Optional[dict]:
 
 def match_industry(text_signals: list[str]) -> list[tuple[str, float, str]]:
     """
-    根据信号词列表匹配行业，返回 [(key, score, name), ...] 按得分降序。
+    Match signals to industries, return [(key, score, name), ...] sorted descending.
 
-    得分 = 匹配信号数 / 总信号数
+    Scoring:
+      - Base: min(matches / 3, 1.0) — capped at 3 matches, so more context
+        signals don't dilute the score.
+      - Boost: +0.2 per strong signal, max +0.4.
+      - Final clipped to [0, 1].
     """
     text_lower = [s.lower() for s in text_signals]
     results = []
     for key, profile in INDUSTRY_PROFILES.items():
-        matches = sum(1 for sig in profile["signals"] if any(sig in t for t in text_lower))
-        if matches > 0:
-            score = min(matches / max(len(text_signals), 1), 1.0)
-            results.append((key, score, profile["name"]))
+        matches = sum(1 for sig in profile["signals"]
+                      if any(sig.lower() in t for t in text_lower))
+        if matches == 0:
+            continue
+
+        # Base: bounded by 3
+        score = min(matches / 3.0, 1.0)
+
+        # Boost: strong signals
+        strong_set = STRONG_SIGNALS.get(key, set())
+        strong_matches = sum(1 for sig in strong_set
+                             if any(sig.lower() in t for t in text_lower))
+        boost = min(strong_matches * 0.2, 0.4)
+
+        final_score = min(score + boost, 1.0)
+        results.append((key, round(final_score, 2), profile["name"]))
+
     results.sort(key=lambda x: x[1], reverse=True)
     return results
 
