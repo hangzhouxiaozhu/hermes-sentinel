@@ -1,6 +1,6 @@
 ---
 name: hermes-sentinel
-description: 后台守护 — 硬件监控、网络质量检测、成本记账、故障自愈、安全审查，全程自动无感运行
+description: 自适应指令理解（行业坐标系）+ 硬件监控、网络质量检测、成本记账、故障自愈、安全审查，全程自动无感运行
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon
@@ -15,7 +15,7 @@ triggers:
   - type: hook
     event: on_skill_install
     handler: guardian_on_skill_install
-tags: [monitoring, network, cost-tracking, self-healing, security]
+tags: [adaptive-understanding, monitoring, network, cost-tracking, self-healing, security]
 ---
 
 # Hermes Guardian · 无感守护者
@@ -39,6 +39,89 @@ Hermes Guardian 是一个**后台守护 skill**。它对用户完全透明——
    "我刚才试了 XXX 没成功，
    你方便的时候能 YYY 吗？"
 ```
+
+---
+
+## 核心能力：自适应指令理解（行业坐标系）
+
+这是 Sentinel 区别于"查表式 AI"的核心区别。
+
+当用户输入 ≤5 个字、或指向模糊、或引用上文（"和上次一样""继续"）时，Sentinel 不走"对齐 skill 标准"的机械路径，而是三步专业重构：
+
+### 三步流程
+
+```
+"太暗"
+   │
+   ▼
+① 行业定位
+   根据当前上下文 + memory + 已加载 skill，
+   判定任务所属行业领域：
+   ├─ "公众号排版/封面设计" → 新媒体视觉设计
+   ├─ "小红书笔记/封面渲染" → 社交媒体内容运营
+   ├─ "Python脚本/代码修改" → 软件工程
+   └─ "Token统计/API调用"   → AI 运维
+   │
+   ▼
+② 标准调取（三源交叉验证）
+   web_search("行业关键词 + 最佳实践 + 2026")
+     ×
+   skill 已沉淀的用户专业标准（配色、字体、审核红线）
+     ×
+   模型训练数据中的行业共识标准
+   │
+   ▼
+③ 专业重构
+   不是"把模糊输入对齐 skill 标准"，
+   而是——先搜索行业当前最优解法，
+   确认 skill 标准是否符合行业共识，
+   再输出含设计原理的完整方案。
+```
+
+### 关键区别
+
+| 对齐 skill 标准（传统做法） | 行业坐标系（Sentinel） |
+|----------------|---------------------|
+| skill 写死"你试出来的正确答案"，直接套用 | skill 写死答案 + web_search 补行业当前最优解题思路 |
+| 只做"查表替换" | 先确认 skill 标准符合行业共识，不一致时主动告知差异 |
+| 未知场景 → 无 skill → 退回通用回答 | 无 skill → 现场搜索行业标准 → 构建临时坐标系 |
+| 输出"亮度+20" | 输出含设计原理的完整方案 |
+
+### 示例
+
+```
+用户: "太暗"
+  → 行业定位: 公众号封面 → 新媒体视觉设计
+  → 标准调取: web_search("公众号封面亮度 对比度 移动端可读性 2026")
+             × skill 规定底色 #fdfcf9
+             × 移动端 feed 流 0.3 秒视觉锚点原则
+  → 专业重构: "新媒体封面在移动端需 0.3 秒建立视觉锚点。
+              当前问题：底色偏深→标题对比度不足。
+              行业标准解法：底色调至暖白 #fdfcf9，
+              标题提至 58px #1a1a2e，左加 4px 金色竖线。
+              缩略图模式（200×200 像素）下标题仍可辨识。"
+              然后直接执行渲染。
+
+用户: "乱码"
+  → 行业定位: 软件工程 → Python 编码
+  → 标准调取: web_search("微信公众号 API 编码最佳实践 python")
+             × skill 只记了 ensure_ascii=False
+             × 微信 API 文档要求 charset=utf-8 header
+  → 专业重构: 补上 ensure_ascii=False + 加上 Content-Type charset=utf-8 header
+              两个问题一起修，不是一个个来。
+
+用户: 陌生行业问题
+  → 无 skill 覆盖
+  → 现场 web_search 构建行业坐标系
+  → 输出有依据的方案，不投降
+```
+
+### 关键规则
+
+- 输入越短 → 推断越多 → 质量不降
+- 输出镜像用户风格（直接、不废话、交付物优先）
+- 同类纠正出现 3 次 → 主动提议固化进对应 skill
+- 遇到"和上次一样" → session_search 找回操作流程 → 照做
 
 ### 什么时候出声
 
