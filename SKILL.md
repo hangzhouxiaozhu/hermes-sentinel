@@ -12,9 +12,6 @@ triggers:
   - type: hook
     event: after_api_call
     handler: guardian_on_api_call
-  - type: hook
-    event: on_skill_install
-    handler: guardian_on_skill_install
 tags: [adaptive-understanding, monitoring, network, cost-tracking, self-healing, security]
 ---
 

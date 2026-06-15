@@ -60,7 +60,7 @@ if echo "$CRON_NEW" | grep -q "$SKILL_NAME/cron/hardware-check"; then
 else
     M_OFFSET=$(( RANDOM % 10 ))
     CRON_NEW="$CRON_NEW
-$M_OFFSET,*/10 * * * * $TICK_SCRIPT 2>&1 | logger -t sentinel-tick"
+$M_OFFSET-59/10 * * * * $TICK_SCRIPT 2>&1 | logger -t sentinel-tick"
     echo "  ✅ 已添加：每 10 分钟硬件+网络巡检"
     ADDED=1
 fi

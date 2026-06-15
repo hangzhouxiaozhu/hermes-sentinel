@@ -4,8 +4,8 @@ Records every LLM API call's prompt/completion tokens to
 ``~/.hermes/logs/model_cost.log`` via Sentinel's ``cost_tracker``.
 
 Works with all providers and proxy APIs — extracts token counts from
-the ``usage`` object in the API response.  Falls back gracefully when
-no usage data is present.
+the ``usage`` object in the API response, using ``extract_usage()``
+which supports OpenAI, Anthropic, Gemini, and common flat formats.
 
 Auto-activated by ``install.sh``; no manual setup needed.
 """
@@ -20,15 +20,19 @@ from typing import Any, Dict
 logger = logging.getLogger("hermes_sentinel")
 
 
-def _locate_sentinel_scripts() -> str:
-    """Locate Sentinel's scripts directory (best-effort)."""
-    path = os.path.join(
-        os.path.expanduser("~"),
-        ".hermes", "skills", "system", "hermes-sentinel", "scripts",
-    )
-    if os.path.isdir(path) and path not in sys.path:
-        sys.path.insert(0, path)
-    return path
+_SENTINEL_SCRIPTS = os.path.join(
+    os.path.expanduser("~"),
+    ".hermes", "skills", "system", "hermes-sentinel", "scripts",
+)
+
+
+def _ensure_sentinel_path() -> bool:
+    """Add Sentinel scripts dir to ``sys.path`` if present.  Returns bool."""
+    if os.path.isdir(_SENTINEL_SCRIPTS):
+        if _SENTINEL_SCRIPTS not in sys.path:
+            sys.path.insert(0, _SENTINEL_SCRIPTS)
+        return True
+    return False
 
 
 def _record_token_usage(**kwargs: Any) -> None:
@@ -37,15 +41,16 @@ def _record_token_usage(**kwargs: Any) -> None:
     if not usage:
         return
 
+    if not _ensure_sentinel_path():
+        logger.debug("Sentinel scripts not found at %s", _SENTINEL_SCRIPTS)
+        return
+
     model = kwargs.get("model") or kwargs.get("response_model") or "unknown"
     api_mode = kwargs.get("api_mode", "unknown")
-
-    _locate_sentinel_scripts()
 
     try:
         from cost_tracker import extract_usage, record
 
-        # 用 core 的 extract_usage() 统一解析，避免插件侧重复逻辑
         parsed = extract_usage({"usage": usage})
         if parsed.get("confidence") != "high":
             return
