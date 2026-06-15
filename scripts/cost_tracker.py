@@ -159,7 +159,7 @@ def record(model, input_tokens, output_tokens, task_type="unknown") -> dict:
     if cost is not None:
         entry["cost_usd"] = cost
 
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     return {"recorded": True, "input_tokens": input_tokens,
@@ -262,7 +262,7 @@ def get_daily_summary(target_date=None) -> dict:
     has_any_cost = False
     total_calls = 0
 
-    with open(LOG_FILE) as f:
+    with open(LOG_FILE, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

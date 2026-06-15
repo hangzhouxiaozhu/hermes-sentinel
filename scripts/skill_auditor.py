@@ -74,7 +74,7 @@ def _log(action, detail, severity="INFO"):
             "severity": severity,
             "detail": detail,
         }
-        with open(LOG_FILE, "a") as f:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass  # 日志写失败不应影响安全判定

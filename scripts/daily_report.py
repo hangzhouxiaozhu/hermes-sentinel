@@ -20,7 +20,7 @@ def hardware_summary():
 
     entries = []
     try:
-        with open(log_file) as f:
+        with open(log_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -77,7 +77,7 @@ def cost_summary():
     total_cost = 0
 
     try:
-        with open(log_file) as f:
+        with open(log_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

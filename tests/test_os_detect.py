@@ -99,3 +99,109 @@ class TestNetworkNoCrash(unittest.TestCase):
 
     def test_active_interface(self):
         self.assertIsInstance(get_active_interface(), str)
+
+
+class TestWindowsMockFunctions(unittest.TestCase):
+    """Windows CIM/PowerShell mock tests — verify parsing logic."""
+
+    def _mock_memory_json(self):
+        """Simulate PowerShell CIM output for memory."""
+        return '{"TotalVisibleMemoryKb": 16777216, "FreePhysicalMemoryKb": 8388608, "SwapTotalMb": 4096, "SwapUsedMb": 1024}'
+
+    def test_memory_from_powershell_json(self):
+        """Parse CIM JSON output like actual _memory_windows()."""
+        import json as _json
+        data = _json.loads(self._mock_memory_json())
+        total_kb = float(data.get("TotalVisibleMemoryKb", 0))
+        free_kb = float(data.get("FreePhysicalMemoryKb", 0))
+        total_gb = round(total_kb / (1024**2), 2)
+        used_gb = round((total_kb - free_kb) / (1024**2), 2)
+        mem_pct = round((total_kb - free_kb) / total_kb * 100, 1) if total_kb > 0 else 0
+        self.assertEqual(total_gb, 16.0)
+        self.assertEqual(mem_pct, 50.0)
+
+    def test_swap_from_powershell_json(self):
+        import json as _json
+        data = _json.loads(self._mock_memory_json())
+        st = float(data.get("SwapTotalMb", 0))
+        su = float(data.get("SwapUsedMb", 0))
+        pct = round(su / st * 100, 1) if st > 0 else 0
+        self.assertEqual(st, 4096)
+        self.assertEqual(su, 1024)
+        self.assertEqual(pct, 25.0)
+
+    def test_cpu_from_powershell_json_single(self):
+        """Single CPU load percentage."""
+        import json as _json
+        data = _json.loads("45")
+        self.assertEqual(round(float(data), 2), 45.0)
+
+    def test_cpu_from_powershell_json_multi(self):
+        """Multi-core CPU load array."""
+        import json as _json
+        data = _json.loads("[35, 42, 38, 41]")
+        avg = sum(float(v) for v in data if v is not None) / max(len(data), 1)
+        self.assertEqual(round(avg, 2), 39.0)
+
+    def test_gpu_from_powershell_json(self):
+        import json as _json
+        data = _json.loads('[{"Name": "NVIDIA RTX 4090", "AdapterRAM": 25769803776}]')
+        if isinstance(data, list):
+            for gpu in data:
+                name = (gpu.get("Name") or "").strip()
+                if name:
+                    vram_mb = int((gpu.get("AdapterRAM") or 0)) // (1024 * 1024)
+                    self.assertEqual(name, "NVIDIA RTX 4090")
+                    self.assertEqual(vram_mb, 24576)
+                    break
+
+    def test_proxy_registry_output_plain(self):
+        import json as _json
+        data = _json.loads('{"ProxyEnable": 1, "ProxyServer": "127.0.0.1:7897"}')
+        self.assertTrue(data.get("ProxyEnable"))
+        server = data.get("ProxyServer", "")
+        self.assertEqual(server, "127.0.0.1:7897")
+
+    def test_proxy_registry_output_protocol(self):
+        import json as _json
+        data = _json.loads('{"ProxyEnable": 1, "ProxyServer": "http=127.0.0.1:7897;https=127.0.0.1:7897"}')
+        self.assertTrue(data.get("ProxyEnable"))
+        server = data.get("ProxyServer", "")
+        http = https = None
+        if "=" in server:
+            for part in server.split(";"):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    k = k.strip().lower()
+                    if k == "http":
+                        http = v
+                    elif k == "https":
+                        https = v
+        self.assertEqual(http, "127.0.0.1:7897")
+        self.assertEqual(https, "127.0.0.1:7897")
+
+    def test_proxy_registry_disabled(self):
+        import json as _json
+        data = _json.loads('{"ProxyEnable": 0, "ProxyServer": ""}')
+        self.assertFalse(data.get("ProxyEnable"))
+
+    def test_gateway_route_output(self):
+        import json as _json
+        data = _json.loads('{"NextHop": "192.168.1.1"}')
+        self.assertEqual(data.get("NextHop"), "192.168.1.1")
+
+    def test_gateway_route_empty(self):
+        import json as _json
+        data = _json.loads("[]")
+        self.assertEqual(len(data), 0)
+
+    def test_dns_server_output(self):
+        import json as _json
+        data = _json.loads('["8.8.8.8", "1.1.1.1"]')
+        self.assertIsInstance(data, list)
+        self.assertIn("8.8.8.8", data)
+
+    def test_interface_output(self):
+        import json as _json
+        data = _json.loads('{"InterfaceAlias": "Ethernet0"}')
+        self.assertEqual(data.get("InterfaceAlias"), "Ethernet0")

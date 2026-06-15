@@ -44,7 +44,7 @@ def emergency_protection(snapshot):
     emergency_file = cache_dir / f"emergency_save_{timestamp}.json"
     snapshot["emergency"] = True
     snapshot["timestamp"] = datetime.now(timezone.utc).isoformat()
-    with open(emergency_file, "w") as f:
+    with open(emergency_file, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, indent=2, ensure_ascii=False)
 
     alert_file = cache_dir / "MEMORY_DANGER"
@@ -62,7 +62,7 @@ def emergency_protection(snapshot):
 def write_log(snapshot):
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     snapshot["timestamp"] = datetime.now(timezone.utc).isoformat()
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(snapshot, ensure_ascii=False) + "\n")
 
 # ── 对外接口（供 guardian_core 调用） ─────────────────────
@@ -144,7 +144,7 @@ def history_summary() -> dict:
 
     warn = danger = total = 0
     try:
-        with open(LOG_FILE) as f:
+        with open(LOG_FILE, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

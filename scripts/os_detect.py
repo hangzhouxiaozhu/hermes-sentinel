@@ -112,7 +112,7 @@ def _memory_linux():
               "swap_total_mb": 0, "swap_used_mb": 0, "swap_pct": 0}
     try:
         info = {}
-        with open("/proc/meminfo") as f:
+        with open("/proc/meminfo", encoding="utf-8") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:
@@ -152,34 +152,40 @@ def _memory_linux():
 
 
 def _memory_windows():
-    """Windows 内存 (wmic)"""
+    """Windows 内存 (PowerShell CIM) — single combined query."""
     result = {"total_gb": 0, "used_gb": 0, "free_gb": 0, "memory_pct": 0,
               "swap_total_mb": 0, "swap_used_mb": 0, "swap_pct": 0}
     try:
-        out = _run(["wmic", "OS", "get", "TotalVisibleMemorySize,FreePhysicalMemory", "/format:csv"], timeout=5)
+        ps = (
+            "&{"
+            "$os=Get-CimInstance Win32_OperatingSystem;"
+            "$pf=Get-CimInstance Win32_PageFileUsage;"
+            "@{"
+            "TotalVisibleMemoryKb=$os.TotalVisibleMemorySize;"
+            "FreePhysicalMemoryKb=$os.FreePhysicalMemory;"
+            "SwapTotalMb=$pf.AllocatedBaseSize;"
+            "SwapUsedMb=$pf.CurrentUsage"
+            "}|ConvertTo-Json"
+            "}"
+        )
+        out = _run(["powershell", "-NoProfile", "-Command", ps], timeout=10)
         if out:
-            for line in out.split("\n"):
-                parts = line.split(",")
-                if len(parts) >= 3 and parts[1].strip().isdigit():
-                    total_kb = int(parts[1].strip())
-                    free_kb = int(parts[2].strip())
-                    used_kb = total_kb - free_kb
-                    result["total_gb"] = round(total_kb / (1024**2), 2)
-                    result["free_gb"] = round(free_kb / (1024**2), 2)
-                    result["used_gb"] = round(used_kb / (1024**2), 2)
-                    result["memory_pct"] = round(used_kb / total_kb * 100, 1) if total_kb > 0 else 0
-                    break
-
-        # Swap (page file)
-        swap_out = _run(["wmic", "pagefile", "get", "AllocatedBaseSize,CurrentUsage", "/format:csv"], timeout=5)
-        if swap_out:
-            for line in swap_out.split("\n"):
-                parts = line.split(",")
-                if len(parts) >= 3 and parts[1].strip().isdigit():
-                    result["swap_total_mb"] = float(parts[1].strip())
-                    result["swap_used_mb"] = float(parts[2].strip())
-                    result["swap_pct"] = round(float(parts[2].strip()) / float(parts[1].strip()) * 100, 1) if float(parts[1].strip()) > 0 else 0
-                    break
+            import json as _json
+            data = _json.loads(out)
+            total_kb = float(data.get("TotalVisibleMemoryKb", 0))
+            free_kb = float(data.get("FreePhysicalMemoryKb", 0))
+            if total_kb > 0:
+                used_kb = total_kb - free_kb
+                result["total_gb"] = round(total_kb / (1024**2), 2)
+                result["free_gb"] = round(free_kb / (1024**2), 2)
+                result["used_gb"] = round(used_kb / (1024**2), 2)
+                result["memory_pct"] = round(used_kb / total_kb * 100, 1)
+            st = float(data.get("SwapTotalMb", 0))
+            su = float(data.get("SwapUsedMb", 0))
+            if st > 0:
+                result["swap_total_mb"] = st
+                result["swap_used_mb"] = su
+                result["swap_pct"] = round(su / st * 100, 1)
     except Exception as e:
         result["error"] = str(e)
     return result
@@ -222,7 +228,7 @@ def _cpu_darwin():
 def _cpu_linux():
     result = {"load_1min": 0, "load_5min": 0, "load_15min": 0, "cores": 0}
     try:
-        load = open("/proc/loadavg").read().strip()
+        load = open("/proc/loadavg", encoding="utf-8").read().strip()
         parts = load.split()
         if len(parts) >= 3:
             result["load_1min"] = round(float(parts[0]), 2)
@@ -238,14 +244,17 @@ def _cpu_windows():
     result = {"load_1min": 0, "load_5min": 0, "load_15min": 0, "cores": 0}
     try:
         result["cores"] = os.cpu_count() or 0
-        # Windows 用 wmic 获取 CPU 使用率（单次采样）
-        out = _run(["wmic", "CPU", "get", "LoadPercentage", "/format:csv"], timeout=5)
+        out = _run(["powershell", "-NoProfile", "-Command",
+            "&{$cpu=Get-CimInstance Win32_Processor; $cpu.LoadPercentage|ConvertTo-Json}"],
+            timeout=10)
         if out:
-            for line in out.split("\n"):
-                parts = line.split(",")
-                if len(parts) >= 2 and parts[-1].strip().isdigit():
-                    result["load_1min"] = round(float(parts[-1].strip()), 2)
-                    break
+            import json as _json
+            data = _json.loads(out)
+            if isinstance(data, list):
+                avg = sum(float(v) for v in data if v is not None) / max(len(data), 1)
+                result["load_1min"] = round(avg, 2)
+            elif isinstance(data, (int, float)):
+                result["load_1min"] = round(float(data), 2)
     except Exception:
         pass
     return result
@@ -361,20 +370,23 @@ def _gpu_linux():
 def _gpu_windows():
     result = {"gpu_name": "unknown", "vram_mb": 0, "available": False}
     try:
-        out = _run(["wmic", "path", "win32_VideoController", "get", "Name,AdapterRAM", "/format:csv"], timeout=10)
+        out = _run(["powershell", "-NoProfile", "-Command",
+            "&{Get-CimInstance Win32_VideoController|Select-Object Name,AdapterRAM|ConvertTo-Json}"],
+            timeout=10)
         if out:
-            for line in out.split("\n"):
-                parts = line.split(",")
-                if len(parts) >= 3:
-                    name = parts[-1].strip()
-                    ram_str = parts[-2].strip() if len(parts) >= 3 else ""
-                    if name and "name" not in name.lower():
+            import json as _json
+            data = _json.loads(out)
+            if isinstance(data, dict):
+                data = [data]
+            if isinstance(data, list):
+                for gpu in data:
+                    name = (gpu.get("Name") or "").strip()
+                    if name:
                         result["gpu_name"] = name
                         result["available"] = True
-                        if ram_str.isdigit():
-                            # wmic 返回的是 bytes
-                            result["vram_mb"] = int(ram_str) // (1024 * 1024)
-                            break
+                        ram_bytes = gpu.get("AdapterRAM") or 0
+                        result["vram_mb"] = int(ram_bytes) // (1024 * 1024)
+                        break
     except Exception:
         pass
     return result
@@ -466,10 +478,23 @@ def _proxy_linux():
 
 def _proxy_windows():
     proxy = {"enabled": False, "http": None, "https": None, "socks": None}
-    # Windows: 注册表代理设置
+
+    # Priority 1: Environment variables (fastest, most portable)
+    for env_key, proto in [("http_proxy", "http"), ("https_proxy", "https"),
+                            ("HTTP_PROXY", "http"), ("HTTPS_PROXY", "https")]:
+        val = os.environ.get(env_key)
+        if val and not proxy[proto]:
+            clean = val.replace("http://", "").replace("https://", "")
+            proxy[proto] = clean
+            proxy["enabled"] = True
+
+    if proxy["enabled"]:
+        return proxy
+
+    # Priority 2: Registry (Internet Settings)
     try:
-        out = _run(["powershell", "-Command",
-            "Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings' | Select-Object ProxyEnable, ProxyServer, ProxyOverride | ConvertTo-Json"],
+        out = _run(["powershell", "-NoProfile", "-Command",
+            "&{$is=Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'; @{ProxyEnable=$is.ProxyEnable;ProxyServer=$is.ProxyServer}|ConvertTo-Json}"],
             timeout=5)
         if out:
             import json as _json
@@ -478,7 +503,6 @@ def _proxy_windows():
                 proxy["enabled"] = True
                 server = data.get("ProxyServer", "")
                 if "=" in server:
-                    # 协议特定代理如 "http=127.0.0.1:7897;https=..."
                     for part in server.split(";"):
                         if "=" in part:
                             k, v = part.split("=", 1)
@@ -489,6 +513,22 @@ def _proxy_windows():
                     proxy["http"] = proxy["https"] = server
     except Exception:
         pass
+
+    # Priority 3: WinHTTP (corporate networks)
+    if not proxy["enabled"]:
+        try:
+            out = _run(["netsh", "winhttp", "show", "proxy"], timeout=5)
+            if out and "直接" not in out and "No proxy" not in out:
+                for line in out.split("\n"):
+                    if "Proxy Server" in line:
+                        val = line.split(":")[-1].strip()
+                        if val:
+                            proxy["http"] = proxy["https"] = val
+                            proxy["enabled"] = True
+                            break
+        except Exception:
+            pass
+
     return proxy
 
 
@@ -531,13 +571,16 @@ def _iface_linux():
 
 def _iface_windows():
     try:
-        out = _run(["powershell", "-Command",
-            "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -First 1 InterfaceAlias | ConvertTo-Json"],
+        out = _run(["powershell", "-NoProfile", "-Command",
+            "&{Get-NetRoute -DestinationPrefix '0.0.0.0/0'|Select-Object -First 1 InterfaceAlias|ConvertTo-Json}"],
             timeout=5)
         if out:
             import json as _json
             data = _json.loads(out)
-            return data.get("InterfaceAlias", "unknown")
+            if isinstance(data, dict):
+                return data.get("InterfaceAlias", "unknown")
+            if isinstance(data, list) and data:
+                return data[0].get("InterfaceAlias", "unknown")
     except Exception:
         pass
     return "unknown"
@@ -643,13 +686,16 @@ def get_gateway() -> str:
         return ""
     if IS_WINDOWS:
         try:
-            out = _run(["powershell", "-Command",
-                "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -First 1 NextHop | ConvertTo-Json"],
+            out = _run(["powershell", "-NoProfile", "-Command",
+                "&{Get-NetRoute -DestinationPrefix '0.0.0.0/0'|Select-Object -First 1 NextHop|ConvertTo-Json}"],
                 timeout=5)
             if out:
                 import json as _json
                 data = _json.loads(out)
-                return data.get("NextHop", "")
+                if isinstance(data, dict):
+                    return data.get("NextHop", "")
+                if isinstance(data, list) and data:
+                    return data[0].get("NextHop", "")
         except Exception:
             pass
     return ""
@@ -672,7 +718,7 @@ def get_dns_servers() -> list:
     if IS_LINUX:
         servers = []
         try:
-            with open("/etc/resolv.conf") as f:
+            with open("/etc/resolv.conf", encoding="utf-8") as f:
                 for line in f:
                     if line.startswith("nameserver"):
                         parts = line.split()
@@ -683,8 +729,8 @@ def get_dns_servers() -> list:
         return servers
     if IS_WINDOWS:
         try:
-            out = _run(["powershell", "-Command",
-                "Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object -ExpandProperty ServerAddresses | ConvertTo-Json"],
+            out = _run(["powershell", "-NoProfile", "-Command",
+                "&{Get-DnsClientServerAddress -AddressFamily IPv4|Select-Object -ExpandProperty ServerAddresses|ConvertTo-Json}"],
                 timeout=5)
             if out:
                 import json as _json

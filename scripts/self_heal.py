@@ -28,7 +28,7 @@ def _log(action, detail, success=True):
         "detail": detail,
         "success": success,
     }
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 

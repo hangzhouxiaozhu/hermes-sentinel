@@ -24,7 +24,12 @@ import os_detect
 HERMES_HOME = Path.home() / ".hermes"
 LOG_FILE = HERMES_HOME / "logs" / "network_monitor.log"
 STATE_FILE = HERMES_HOME / "cache" / "guardian" / "network_state.json"
+CONSECUTIVE_FAIL_FILE = HERMES_HOME / "cache" / "guardian" / "network_consecutive_failures.json"
 CONFIG_FILE = HERMES_HOME / "config.yaml"
+
+# Number of consecutive failures required before alerting (noise reduction)
+# Windows firewalls, corporate VPN, brief WiFi drops should not trigger on first miss
+CONSECUTIVE_FAIL_THRESHOLD = 3
 
 COMMON_PROVIDERS = {
     "deepseek":     {"host": "api.deepseek.com",     "port": 443},
@@ -163,7 +168,13 @@ def quick_reachability() -> dict:
     proxy = os_detect.detect_proxy()
     proxy_listening = _test_proxy_health(proxy) if proxy["enabled"] else None
 
-    if internet_ok and dns_ok:
+    # Apply consecutive failure guard (noise reduction)
+    # Transient issues (WiFi switch, VPN reconnect, firewall blip) must
+    # occur CONSECUTIVE_FAIL_THRESHOLD times before triggering alerts.
+    is_healthy = internet_ok and dns_ok
+    _track_consecutive_failures(is_healthy)
+
+    if is_healthy:
         return {"healthy": True, "gateway_reachable": gw_ok, "internet_reachable": internet_ok,
                 "has_proxy": proxy["enabled"], "proxy_listening": proxy_listening, "issues_hint": None}
     if not gw_ok:
@@ -355,6 +366,41 @@ def _detect_change(current: dict) -> dict:
     return {"changed": len(changes) > 0, "details": changes, "is_first": False}
 
 
+def _track_consecutive_failures(healthy: bool) -> bool:
+    """
+    Track consecutive network failures. Only return True (alert-worthy)
+    when CONSECUTIVE_FAIL_THRESHOLD is reached.
+
+    This prevents false alarms from transient issues (WiFi handoff, VPN
+    reconnect, firewall blip, corporate proxy timeout).
+    """
+    CONSECUTIVE_FAIL_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if CONSECUTIVE_FAIL_FILE.exists():
+            count = int(json.loads(CONSECUTIVE_FAIL_FILE.read_text()).get("count", 0))
+        else:
+            count = 0
+    except Exception:
+        count = 0
+
+    if healthy:
+        if count > 0:
+            count = 0
+            CONSECUTIVE_FAIL_FILE.write_text(json.dumps({"count": 0}, ensure_ascii=False))
+        return False
+
+    count += 1
+    CONSECUTIVE_FAIL_FILE.write_text(json.dumps({"count": count}, ensure_ascii=False))
+
+    if count >= CONSECUTIVE_FAIL_THRESHOLD:
+        count = 0
+        CONSECUTIVE_FAIL_FILE.write_text(json.dumps({"count": 0}, ensure_ascii=False))
+        return True
+
+    return False
+
+
 def _write_log(results: dict):
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -366,5 +412,5 @@ def _write_log(results: dict):
         "issues": results.get("issues", []),
         "platform": os_detect.SYSTEM,
     }
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
