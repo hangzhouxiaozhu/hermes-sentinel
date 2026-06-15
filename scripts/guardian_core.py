@@ -12,6 +12,8 @@ Hermes Guardian — 守护核心（中央协调器）
 """
 
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,33 +55,80 @@ except ImportError:
 
 # ── 自动安装插件（用户只需 cp -r 一次） ────────────────────
 
-PLUGIN_SOURCE = Path(__file__).resolve().parent.parent / "plugin"
+SKILL_DIR = Path(__file__).resolve().parent.parent
+CRON_DIR = SKILL_DIR / "cron"
+PLUGIN_SOURCE = SKILL_DIR / "plugin"
 PLUGIN_TARGET = HERMES_HOME / "plugins" / "hermes-sentinel"
-_PLUGIN_INSTALLED = False
+_INIT_DONE = False
 
 
-def _ensure_plugin_installed() -> bool:
-    """Auto-install Hermes plugin from skill directory on first tick.
-
-    User only needs to ``cp -r`` the skill directory.  No manual
-    ``install.sh`` or plugin copy step required.
+def _first_run_setup() -> str | None:
     """
-    global _PLUGIN_INSTALLED
-    if _PLUGIN_INSTALLED:
-        return True
-    if PLUGIN_TARGET.exists() and (PLUGIN_TARGET / "__init__.py").exists():
-        _PLUGIN_INSTALLED = True
-        return True
-    if not PLUGIN_SOURCE.exists():
-        return False
-    try:
-        import shutil
-        PLUGIN_TARGET.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(PLUGIN_SOURCE), str(PLUGIN_TARGET), dirs_exist_ok=True)
-        _PLUGIN_INSTALLED = True
-        return True
-    except Exception:
-        return False
+    首次安装自动配置：创建目录、安装插件、写 cron。
+
+    由模块导入时触发，也在 guardian_tick() 开头冗余调用。
+    返回状态消息字符串，首次完成时有值，后续调用返回 None。
+    """
+    global _INIT_DONE
+    if _INIT_DONE:
+        return None
+
+    steps: list[str] = []
+
+    # 1. 创建日志和缓存目录
+    (HERMES_HOME / "logs").mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 2. 安装插件
+    if PLUGIN_SOURCE.exists():
+        try:
+            import shutil
+            PLUGIN_TARGET.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(str(PLUGIN_SOURCE), str(PLUGIN_TARGET), dirs_exist_ok=True)
+            steps.append("plugin")
+        except Exception:
+            pass
+
+    # 3. 写 cron（仅在非 Windows 且有 crontab 时）
+    if sys.platform != "win32":
+        try:
+            existing = subprocess.run(
+                ["crontab", "-l"], capture_output=True, text=True, timeout=5
+            ).stdout or ""
+            tick_script = str(CRON_DIR / "hardware-check.sh")
+            daily_script = str(CRON_DIR / "daily-backup.sh")
+
+            new_cron = existing
+            added = 0
+
+            if "sentinel-tick" not in existing:
+                import random
+                m_off = random.randint(0, 9)
+                new_cron += f"\n{m_off}-59/10 * * * * {tick_script} 2>&1 | logger -t sentinel-tick"
+                added += 1
+
+            if "sentinel-daily" not in existing:
+                rnd = random.randint(0, 29)
+                new_cron += f"\n{rnd} 9 * * * {daily_script} 2>&1 | logger -t sentinel-daily"
+                added += 1
+
+            if added > 0:
+                subprocess.run(
+                    ["crontab"], input=new_cron, capture_output=True, text=True, timeout=5
+                )
+                steps.append(f"cron({added} jobs)")
+        except Exception:
+            pass
+
+    _INIT_DONE = True
+
+    if steps:
+        return "Sentinel setup: " + ", ".join(steps) + " installed"
+    return None
+
+
+# 模块导入时自动执行首次初始化（Hermes 加载 skill 时触发）
+_first_run_setup()
 
 
 # ── 用户消息前置 hook ──────────────────────────────────────
@@ -147,11 +196,10 @@ def guardian_tick() -> dict:
         notify=False → 静默，不通知用户
         notify=True  → narrator 把 message 翻译成人话输出
     """
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    notifications = []
+    # 冗余：首次安装初始化（即使模块导入时已触发）
+    _first_run_setup()
 
-    # 自动安装插件（如果尚未安装）
-    _ensure_plugin_installed()
+    notifications = []
 
     # 1. 硬件监控
     if hardware_monitor:

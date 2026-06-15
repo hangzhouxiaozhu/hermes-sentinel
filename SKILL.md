@@ -213,4 +213,11 @@ All logs in `~/.hermes/logs/` (JSONL format, for admin troubleshooting), **no co
 cp -r hermes-sentinel ~/.hermes/skills/system/
 ```
 
-That's it. The first cron patrol (within 10 minutes) will automatically install the Hermes plugin for token tracking. No extra steps needed.
+Or in Hermes: `/install hermes-sentinel`
+
+That's it. On first load, Sentinel automatically:
+- Creates log directories
+- Installs the token tracking plugin
+- Configures cron for 10-minute patrols and daily reports
+
+No extra steps needed.
