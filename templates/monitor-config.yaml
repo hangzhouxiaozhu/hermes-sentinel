@@ -1,0 +1,22 @@
+# Hermes Guardian 硬件监控配置模板
+# 根据实际硬件规格调整参数
+
+memory:
+  total_gb: 16
+  warn_pct: 70      # 内存使用 > 70% → 预警（后台自动处理）
+  danger_pct: 85    # 内存使用 > 85% → 危险（触发兜底保护 + 通知）
+
+swap:
+  warn_pct: 30      # Swap 使用 > 30% → 预警
+  danger_pct: 60    # Swap 使用 > 60% → 危险
+
+cpu:
+  load_warn: 5.0    # 1min 负载 > 5.0 → 预警
+
+disk:
+  warn_pct: 90      # 磁盘使用 > 90% → 预警
+
+guard:
+  check_interval: 600    # 巡检间隔（秒，默认 600 = 10 分钟）
+  log_retention_days: 30 # 日志保留天数（超期自动清理）
+  auto_cleanup: true     # 磁盘预警时自动清理过期日志
