@@ -275,7 +275,12 @@ def get_disk_info() -> dict:
     result = {"root_total_gb": 0, "root_avail_gb": 0, "root_pct": 0,
               "home_total_gb": 0, "home_avail_gb": 0, "home_pct": 0}
     try:
-        for mount, key in [("/", "root"), (str(Path.home()), "home")]:
+        # Windows: skip unix-style "/" root, only check home directory
+        mounts = [(str(Path.home()), "home")]
+        if not IS_WINDOWS:
+            mounts.insert(0, ("/", "root"))
+
+        for mount, key in mounts:
             stat = os.statvfs(mount) if not IS_WINDOWS else None
             if stat:
                 total = stat.f_frsize * stat.f_blocks
@@ -285,8 +290,7 @@ def get_disk_info() -> dict:
                 free_bytes = ctypes.c_ulonglong(0)
                 total_bytes = ctypes.c_ulonglong(0)
                 ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-                    mount.encode() if IS_WINDOWS else mount,
-                    None, ctypes.byref(total_bytes), ctypes.byref(free_bytes))
+                    mount, None, ctypes.byref(total_bytes), ctypes.byref(free_bytes))
                 total = total_bytes.value
                 avail = free_bytes.value
             else:

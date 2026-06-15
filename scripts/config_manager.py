@@ -1,9 +1,12 @@
 """
-Hermes Sentinel — 配置冲突检测
+Hermes Sentinel — 配置冲突检测 [deprecated]
 
 功能: 扫描所有已安装 skill 的配置建议，检测冲突并给出推荐值。
 注意：本模块只检测和推荐，不写入配置。配置修改需由用户或 Hermes 主循环执行。
 被 guardian_core 调用，不直接输出到终端。
+
+此模块目前需要 Hermes 主循环调用 guardian_on_skill_install() 才能触发。
+在多数部署场景下不会自动运行。保留供后续集成使用。
 """
 
 import re

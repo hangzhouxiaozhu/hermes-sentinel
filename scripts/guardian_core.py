@@ -12,6 +12,7 @@ Hermes Guardian — 守护核心（中央协调器）
 """
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -53,6 +54,11 @@ try:
 except ImportError:
     intent_translator = None
 
+try:
+    import publish_archiver
+except ImportError:
+    publish_archiver = None
+
 # ── 自动安装插件（用户只需 cp -r 一次） ────────────────────
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
@@ -68,9 +74,14 @@ def _first_run_setup() -> str | None:
 
     由模块导入时触发，也在 guardian_tick() 开头冗余调用。
     返回状态消息字符串，首次完成时有值，后续调用返回 None。
+
+    环境变量 HERMES_SENTINEL_SKIP_SETUP=1 跳过安装（用于测试环境/CI）。
     """
     global _INIT_DONE
     if _INIT_DONE:
+        return None
+    if os.environ.get("HERMES_SENTINEL_SKIP_SETUP") == "1":
+        _INIT_DONE = True
         return None
 
     steps: list[str] = []
@@ -246,7 +257,7 @@ def guardian_tick() -> dict:
         except Exception:
             pass
 
-    # 5. 判定是否需要通知用户
+    # 4. 判定是否需要通知用户
     if notifications and narrator:
         return narrator.pick_notification(notifications)
 
@@ -388,3 +399,58 @@ def guardian_daily_report() -> str:
     elif not parts:
         return "今天一切正常。"
     return "。".join(parts) + "。"
+
+
+# ── 文章发布归档 ────────────────────────────────────────
+
+def guardian_archive_article(title: str, digest: str = "",
+                             platform: str = "wechat",
+                             article_id: str = "", url: str = "") -> dict:
+    """
+    记录一篇已发布的文章标题、摘要和日期。
+
+    调用方: Hermes 在每次成功发布公众号文章后调用。
+
+    返回:
+        {"recorded": True, "date": str, "title": str}
+    """
+    if publish_archiver:
+        try:
+            return publish_archiver.record(
+                title=title, digest=digest,
+                platform=platform, article_id=article_id, url=url
+            )
+        except Exception:
+            pass
+    return {"recorded": False, "date": None, "title": title}
+
+
+def guardian_list_articles(start_date: str = None,
+                           end_date: str = None) -> list[dict]:
+    """
+    按日期范围查询已归档文章。不传参数则返回全部。
+
+    返回:
+        [{date, title, digest, platform, ...}, ...]
+    """
+    if publish_archiver:
+        try:
+            if start_date and end_date:
+                return publish_archiver.get_by_date_range(start_date, end_date)
+            elif start_date:
+                return publish_archiver.get_by_date(start_date)
+            else:
+                return publish_archiver.list_all()
+        except Exception:
+            pass
+    return []
+
+
+def guardian_article_stats() -> dict:
+    """获取发布统计。"""
+    if publish_archiver:
+        try:
+            return publish_archiver.get_stats()
+        except Exception:
+            pass
+    return {"total": 0}

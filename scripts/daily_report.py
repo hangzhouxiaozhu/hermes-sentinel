@@ -118,40 +118,40 @@ def generate() -> str:
     cost = cost_summary()
 
     lines = [
-        f"# 📊 Hermes Guardian · 每日守护报告",
-        f"**日期:** {datetime.now().strftime('%Y年%m月%d日 %A')}",
-        f"**报告编号:** {datetime.now().strftime('%Y%m%d')}",
+        f"# 📊 Hermes Sentinel · Daily Report",
+        f"**Date:** {datetime.now().strftime('%Y-%m-%d %A')}",
+        f"**Report ID:** {datetime.now().strftime('%Y%m%d')}",
         f"",
         f"---",
         f"",
-        f"## 🖥️ 硬件状态",
+        f"## 🖥️ Hardware",
         f"",
     ]
 
     if hw["status"] == "no_data":
-        lines.append("暂无硬件监控数据")
+        lines.append("No hardware monitoring data.")
     else:
-        lines.append(f"| 指标 | 当前 | 峰值 |")
-        lines.append(f"|------|------|------|")
-        lines.append(f"| 内存 | {hw['memory_now']} | {hw['memory_peak']} |")
-        lines.append(f"| Swap | - | {hw['swap_peak']} |")
-        lines.append(f"| CPU  | - | {hw['cpu_peak']} |")
+        lines.append(f"| Metric | Current | Peak |")
+        lines.append(f"|--------|---------|------|")
+        lines.append(f"| Memory | {hw['memory_now']} | {hw['memory_peak']} |")
+        lines.append(f"| Swap   | - | {hw['swap_peak']} |")
+        lines.append(f"| CPU    | - | {hw['cpu_peak']} |")
         lines.append(f"")
-        lines.append(f"巡检 {hw['samples']} 次: 🟢{hw['levels']['normal']} / 🟡{hw['levels']['warn']} / 🔴{hw['levels']['danger']}")
+        lines.append(f"Patrols: {hw['samples']} | 🟢{hw['levels']['normal']} 🟡{hw['levels']['warn']} 🔴{hw['levels']['danger']}")
 
-    lines.extend(["", "---", "", "## 💰 今日成本", ""])
+    lines.extend(["", "---", "", "## 💰 Today's Cost", ""])
 
     if cost["status"] == "no_data":
-        lines.append("暂无成本数据")
+        lines.append("No cost data.")
     else:
-        lines.append(f"| 指标 | 值 |")
-        lines.append(f"|------|-----|")
-        lines.append(f"| 总调用 | {cost['total_calls']} 次 |")
-        lines.append(f"| 总费用 | ${cost['total_cost_usd']:.4f} ≈ ¥{cost['total_cost_cny']:.2f} |")
+        lines.append(f"| Metric | Value |")
+        lines.append(f"|--------|-------|")
+        lines.append(f"| Calls  | {cost['total_calls']} |")
+        lines.append(f"| Total  | ${cost['total_cost_usd']:.4f} ≈ ¥{cost['total_cost_cny']:.2f} |")
         if cost["by_model"]:
-            lines.extend(["", "**按模型:**"])
+            lines.extend(["", "**By model:**"])
             for model, data in sorted(cost["by_model"].items(), key=lambda x: x[1]["cost"], reverse=True):
                 pct = data["cost"] / max(cost["total_cost_usd"], 0.001) * 100
-                lines.append(f"- {model}: {data['calls']}次 / ${data['cost']:.4f} ({pct:.0f}%)")
+                lines.append(f"- {model}: {data['calls']} calls / ${data['cost']:.4f} ({pct:.0f}%)")
 
     return "\n".join(lines)

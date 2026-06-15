@@ -7,7 +7,6 @@ Hermes Guardian — Skill 安全审查 (Phase 2)
 
 import json
 import re
-import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 

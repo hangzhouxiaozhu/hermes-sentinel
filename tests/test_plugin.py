@@ -13,6 +13,7 @@ import sys
 import tempfile
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -38,7 +39,7 @@ class TestPluginOpenAIFormat(unittest.TestCase):
 
     def test_records(self):
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook({"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150})
             entry = json.loads(log.read_text())
@@ -50,7 +51,7 @@ class TestPluginOpenAIFormat(unittest.TestCase):
     def test_model_prefers_kwargs_model(self):
         """kwargs['model'] wins over response_model for proxies."""
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook({"prompt_tokens": 10, "completion_tokens": 5},
                       model="deepseek-chat", response_model="gpt-4o")
@@ -64,7 +65,7 @@ class TestPluginAnthropicFormat(unittest.TestCase):
 
     def test_records(self):
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook({"input_tokens": 200, "output_tokens": 80})
             entry = json.loads(log.read_text())
@@ -83,7 +84,7 @@ class TestPluginGeminiFormat(unittest.TestCase):
     def test_prompttokens_at_top_level_is_ok(self):
         """即使用户把 usageMetadata 拍平传进来也能用"""
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook({"promptTokenCount": 300, "candidatesTokenCount": 120})
             # extract_usage 信任的是 usage 里的 prompt_tokens / completion_tokens 等
@@ -95,7 +96,7 @@ class TestPluginGeminiFormat(unittest.TestCase):
     def test_usage_metadata_if_normalized(self):
         """Hermes 把 usageMetadata 归一化到 usage.promptTokenCount 也能用"""
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             # 如果 Hermes 归一化为 OpenAI 格式
             _run_hook({"prompt_tokens": 300, "completion_tokens": 120})
@@ -110,7 +111,7 @@ class TestPluginNoUsage(unittest.TestCase):
 
     def test_empty_usage(self):
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook({})
             self.assertFalse(log.exists())
@@ -118,7 +119,7 @@ class TestPluginNoUsage(unittest.TestCase):
 
     def test_none_usage(self):
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             _run_hook(None)
             self.assertFalse(log.exists())
@@ -130,7 +131,7 @@ class TestPluginSentinelNotInstalled(unittest.TestCase):
 
     def test_graceful_degradation(self):
         log = Path(tempfile.mktemp(suffix=".log"))
-        with unittest.mock.patch("cost_tracker.LOG_FILE", log):
+        with patch("cost_tracker.LOG_FILE", log):
             log.parent.mkdir(parents=True, exist_ok=True)
             import importlib.util
             plugin_init = Path(__file__).resolve().parent.parent / "plugin" / "__init__.py"
