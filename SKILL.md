@@ -221,15 +221,23 @@ All logs in `~/.hermes/logs/` (JSONL format, for admin troubleshooting), **no co
 
 ## Installation
 
+> ⚠️ `hermes skills install hermes-sentinel` does NOT work — this skill is not in the official registry.
+
+### macOS / Linux
+
 ```bash
+git clone https://github.com/hangzhouxiaozhu/hermes-sentinel.git
 cp -r hermes-sentinel ~/.hermes/skills/system/
+# Optional: bash install.sh for cron + plugin
 ```
 
-Or in Hermes: `/install hermes-sentinel`
+### Windows
 
-That's it. On first load, Sentinel automatically:
-- Creates log directories
-- Installs the token tracking plugin
-- Configures cron for 10-minute patrols and daily reports
+```powershell
+# Download ZIP from GitHub → extract → open PowerShell in the folder
+$env:HERMES_HOME = "$env:USERPROFILE\.hermes"
+Copy-Item -Recurse -Force ".\hermes-sentinel" "$env:HERMES_HOME\skills\system\"
+# Optional: .\install.ps1 for scheduled tasks + plugin
+```
 
-No extra steps needed.
+On first load, Sentinel automatically creates log directories, installs the token tracking plugin, and configures scheduled patrols. No extra steps needed.

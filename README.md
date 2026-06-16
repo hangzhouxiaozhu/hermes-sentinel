@@ -112,21 +112,63 @@ All Sentinel modules follow the same flow:
 
 ## Quick Start
 
+### macOS / Linux
+
 ```bash
-# Clone or copy to Hermes skills directory
+# 1. Download
+git clone https://github.com/hangzhouxiaozhu/hermes-sentinel.git
+# or: Download ZIP from GitHub → unzip
+
+# 2. Install
 cp -r hermes-sentinel ~/.hermes/skills/system/
 
-# Or in Hermes:
-# /install hermes-sentinel
+# 3. One-time setup (optional — for cron + plugin)
+cd ~/.hermes/skills/system/hermes-sentinel
+bash install.sh
 ```
 
-**That's it.** On first load, Sentinel automatically:
-1. Creates log directories
-2. Installs the Hermes plugin for token tracking
-3. Configures cron for 10-minute patrols and daily reports
-4. Starts monitoring immediately
+> ⚠️ `hermes skills install hermes-sentinel` will NOT work — this skill is not in the official registry. Use `cp -r` instead.
 
-Run `install.sh` for automated cron setup and plugin installation.
+**What happens on first load:**
+1. Log directories created automatically
+2. Token tracking plugin auto-installed
+3. Cron patrol (every 10 min) + daily report (9:00 AM) configured
+4. Monitoring starts within 10 minutes
+
+---
+
+### Windows
+
+```powershell
+# 1. Download
+# Open https://github.com/hangzhouxiaozhu/hermes-sentinel
+# Click Code → Download ZIP → extract to desktop
+
+# 2. Install (PowerShell)
+$env:HERMES_HOME = "$env:USERPROFILE\.hermes"
+Copy-Item -Recurse -Force "$env:USERPROFILE\Desktop\hermes-sentinel" "$env:HERMES_HOME\skills\system\"
+
+# 3. One-time setup (recommended — for scheduled task + plugin)
+.\install.ps1
+```
+
+> ⚠️ `hermes skills install hermes-sentinel` will NOT work. Use `Copy-Item` instead.
+
+**On first load:** Plugin auto-installs, scheduled tasks (Task Scheduler) created for 15-min patrols and daily 9:00 AM report.
+
+---
+
+### Verify it's working
+
+```bash
+# Check hardware patrol logs
+tail -f ~/.hermes/logs/hardware_monitor.log
+
+# Check token tracking (after an API call)
+tail -f ~/.hermes/logs/model_cost.log
+```
+
+If anything is wrong, Sentinel will tell you in plain language.
 
 ---
 
