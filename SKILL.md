@@ -1,6 +1,18 @@
 ---
 name: hermes-sentinel
-description: Beginner-friendly intent translator + hardware monitoring, network quality detection, token stats, self-healing, security audit. Fully automatic, invisible to the user.
+description: "Hermes Agent background daemon skill — Auto-monitoring, intent translator for beginners, token tracking, network diagnosis, security audit, self-healing. Cross-platform (macOS/Linux/Windows), zero config, zero maintenance."
+keywords:
+  - AI assistant monitoring
+  - token usage tracking
+  - hardware monitoring memory CPU disk
+  - network quality detection
+  - security audit skill
+  - fuzzy input translator
+  - Hermes Agent plugin
+  - beginner-friendly AI tool
+  - 后台守护
+  - 内存监控
+  - Token 统计
 version: 2.0.0
 author: Hermes Agent
 type: system_daemon

@@ -4,8 +4,34 @@
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS-lightgrey)]()
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux-yellow)]()
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue)]()
+[![Tests: 139](https://img.shields.io/badge/Tests-139%20passed-brightgreen)]()
 
-**Hermes Agent background daemon skill** — Beginner-friendly intent translator, hardware monitoring, network quality detection, token stats, self-healing, security audit. All automatic, invisible to the user.
+<br>
+
+> **Hermes 后台守护助手** — 专为 AI 新手设计的全自动守护系统。  
+> **Hermes Agent background daemon** — Auto-monitor memory, network, token usage, and security.  
+> *Zero config. Zero maintenance. Zero privacy risk.*
+
+---
+
+## 项目简介 / About (中文)
+
+**Hermes Sentinel** 是 [Hermes Agent](https://github.com/hangzhouxiaozhu/hermes-sentinel) 的官方后台守护 skill。  
+它专门帮助 **AI 工具新手** 和 **非技术用户**，让 Hermes 用得更省心：
+
+| 你的困扰 | Sentinel 帮你做 |
+|----------|---------------|
+| ❓ 说"太暗""乱码"表达不清 | ✅ **自动翻译**成清晰指令 |
+| 💻 电脑内存/磁盘快满了 | ✅ **自动检测+清理**旧日志 |
+| 🌐 连不上 API、代理没开 | ✅ **自动诊断**并告诉你怎么修 |
+| 💰 AI 花了多少 token 不知道 | ✅ **自动记账**，每日汇总 |
+| 🔒 装插件怕不安全 | ✅ **自动扫描**高危代码和密钥 |
+
+**一句话：** 它不像一个"插件"，更像一个"不打搅你的管家"。后台静默运行，出问题才出声。
+
+<br>
+
+---
 
 ## Core Feature: Beginner-Friendly Intent Translator
 
@@ -34,6 +60,8 @@ intent_translator.translate("太暗")
 | Document | 太啰嗦、太短、看不懂 | Simplify, expand, rewrite |
 
 > **Integration:** Requires the Hermes main loop to call `guardian_before_user_message()` before processing user input.
+
+---
 
 ## Design Principles
 
@@ -82,6 +110,39 @@ All Sentinel modules follow the same flow:
 
 ---
 
+## Quick Start
+
+```bash
+# Clone or copy to Hermes skills directory
+cp -r hermes-sentinel ~/.hermes/skills/system/
+
+# Or in Hermes:
+# /install hermes-sentinel
+```
+
+**That's it.** On first load, Sentinel automatically:
+1. Creates log directories
+2. Installs the Hermes plugin for token tracking
+3. Configures cron for 10-minute patrols and daily reports
+4. Starts monitoring immediately
+
+Run `install.sh` for automated cron setup and plugin installation.
+
+---
+
+## Features
+
+| Feature | Description | Auto-run | Speaks only when needed |
+|---------|-------------|----------|------------------------|
+| 🖥️ **Hardware Monitoring** | Memory, CPU, disk, GPU — auto-clean old logs at 90% disk | ✅ Every 10 min | ✅ |
+| 🌐 **Network Quality** | Internet reachability, DNS, proxy health, API latency | ✅ Every 10 min | ✅ diagnosis + advice |
+| 💰 **Token Tracking** | Auto-record prompt/completion tokens from every API call | ✅ Plugin: post_api_request | ✅ only over budget |
+| 🛡️ **Self-Healing** | Skill integrity checks + log health | ✅ Every 10 min | ✅ |
+| 🔒 **Security Audit** | Scan for API keys, malicious commands, secrets | Before skill install | ✅ only when blocked |
+| 💬 **Intent Translator** | "太暗" → clear instruction for Hermes | Requires Hermes integration | passthrough by default |
+
+---
+
 ## File Reference
 
 | File | Purpose |
@@ -127,6 +188,8 @@ from guardian_core import (
 hermes-sentinel/
 ├── SKILL.md              # Skill behavior definition
 ├── README.md             # This file
+├── install.sh            # macOS/Linux installer
+├── install.ps1           # Windows installer
 ├── plugin/
 │   ├── __init__.py       # Hermes plugin: auto token tracking
 │   └── plugin.yaml
@@ -167,6 +230,17 @@ hermes-sentinel/
 
 ---
 
+## Technical Highlights
+
+- **Zero-touch install** — `import guardian_core` auto-configures cron, plugin, and directories
+- **Cross-platform** — macOS (sysctl), Linux (/proc), Windows (PowerShell CIM)
+- **Token accuracy** — Extracts real token counts from API response `usage` object
+- **Noise reduction** — Network alerts require 3 consecutive failures before notification
+- **Safety** — All data stays local, no telemetry, no external uploads
+- **139 passing tests** — Full CI coverage
+
+---
+
 ## Privacy Notice
 
 Hermes Sentinel runs **fully locally**. It does not collect, transmit, or share any personal data.
@@ -189,6 +263,16 @@ These probes **carry no user data, no authentication, and cannot be attributed t
 - All logs stored in `~/.hermes/logs/`
 - Logs older than 30 days are automatically cleaned
 - Log content is structured machine data (hardware metrics, network latency, API call counts) — **no conversation content**
+
+---
+
+## Why "Sentinel"?
+
+**因为它在后台守护，不出声，不出错。**
+*Because it watches. Silently. Reliably.*
+
+Unlike monitoring dashboards or CLI tools that demand attention,
+Hermes Sentinel is designed to be **forgotten about** — until something needs attention.
 
 ---
 
