@@ -27,6 +27,7 @@ NOTIFICATION_LIMITS = {
     "network_issue":      {"daily_max": 4, "cooldown_sec": 1800},
     "network_restored":   {"daily_max": 2, "cooldown_sec": 3600},
     "skill_blocked":      {"daily_max": 1, "cooldown_sec": 0},
+    "self_inspect":       {"daily_max": 3, "cooldown_sec": 7200},  # 每 2 小时最多一条
 }
 
 # ── 消息模板 ──────────────────────────────────────────────
@@ -55,6 +56,9 @@ MESSAGE_TEMPLATES = {
     },
     "skill_blocked": {
         "normal": lambda ctx: _describe_skill_blocked(ctx),
+    },
+    "self_inspect": {
+        "normal": lambda ctx: _describe_self_inspect(ctx),
     },
 }
 
@@ -215,6 +219,22 @@ def _describe_high_latency(issue: str, topology: str) -> str:
         return f"到 {slow_apis} 响应偏慢，我调整了策略再试试。"
 
 
+def _describe_self_inspect(ctx) -> str:
+    """自身环境问题 → 输出给 Hermes 的修复指令"""
+    msg = ctx.get("message", "")
+    instruction = ctx.get("hermes_instruction", "")
+    issue_type = ctx.get("type", "")
+    severity = ctx.get("severity", "info")
+
+    prefix = ""
+    if "cron" in issue_type and ctx.get("auto_fixed"):
+        return ""
+
+    if instruction:
+        return f"{msg}\n请帮我处理：{instruction}"
+    return msg
+
+
 def _describe_skill_blocked(ctx) -> str:
     """Skill 被拦截 → 人话"""
     reason = ctx.get("reason", "")
@@ -310,10 +330,10 @@ def pick_notification(notifications: list) -> dict:
 
     # 按紧急程度排序：danger > warn > 其他
     urgency_order = {"hardware_danger": 0, "health_danger": 1,
-                     "hardware_warn": 2, "health_warn": 3,
-                     "network_issue": 4, "cost_budget": 5,
-                     "skill_blocked": 6,
-                     "network_restored": 7}
+                     "hardware_warn": 2, "network_issue": 3,
+                     "health_warn": 4, "cost_budget": 5,
+                     "self_inspect": 6, "skill_blocked": 7,
+                     "network_restored": 8}
     notifications.sort(key=lambda n: urgency_order.get(n.get("type", ""), 99))
 
     for notif in notifications:

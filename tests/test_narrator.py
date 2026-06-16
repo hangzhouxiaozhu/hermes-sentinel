@@ -57,6 +57,32 @@ class TestNetworkMessages(unittest.TestCase):
         self.assertIn("网", msg)
 
 
+class TestSelfInspectMessages(unittest.TestCase):
+    def test_self_inspect_with_instruction(self):
+        from narrator import _describe_self_inspect
+        ctx = {"type": "log_permission", "severity": "danger",
+               "message": "日志目录无写入权限",
+               "hermes_instruction": "执行 chmod -R 755"}
+        msg = _describe_self_inspect(ctx)
+        self.assertIn("chmod", msg)
+
+    def test_self_inspect_without_instruction(self):
+        from narrator import _describe_self_inspect
+        ctx = {"type": "cron_missing", "severity": "info",
+               "message": "已自动配置", "hermes_instruction": "",
+               "can_auto_fix": True, "auto_fixed": True}
+        msg = _describe_self_inspect(ctx)
+        self.assertEqual(msg, "")
+
+    def test_self_inspect_notify_passes_instruction(self):
+        from narrator import _describe_self_inspect
+        ctx = {"type": "python_version", "severity": "warn",
+               "message": "Python 版本过旧",
+               "hermes_instruction": "请升级 Python"}
+        msg = _describe_self_inspect(ctx)
+        self.assertIn("请", msg)
+
+
 class TestSkillBlocked(unittest.TestCase):
 
     def test_blocked(self):

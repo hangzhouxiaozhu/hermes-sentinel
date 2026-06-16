@@ -58,6 +58,56 @@ class TestGuardianTick(unittest.TestCase):
         self.assertTrue(hasattr(guardian_core, "get_notification"))
 
 
+class TestSelfInspect(unittest.TestCase):
+    """self_inspect must detect environment issues."""
+
+    def test_self_inspect_returns_list(self):
+        import guardian_core
+        issues = guardian_core.self_inspect()
+        self.assertIsInstance(issues, list)
+
+    def test_each_issue_has_required_fields(self):
+        import guardian_core
+        for issue in guardian_core.self_inspect():
+            for key in ("type", "severity", "message", "hermes_instruction",
+                        "can_auto_fix", "auto_fixed"):
+                self.assertIn(key, issue, f"{issue.get('type', '?')} missing {key}")
+            self.assertIn(issue["severity"], ("info", "warn", "danger"))
+
+    def test_auto_fixed_issues_are_silent(self):
+        """can_auto_fix + auto_fixed = True → skipped by tick."""
+        import guardian_core
+        with patch("guardian_core.self_inspect") as mock_inspect:
+            mock_inspect.return_value = [{
+                "type": "cron_missing", "severity": "info",
+                "message": "已自动配置",
+                "hermes_instruction": "",
+                "can_auto_fix": True, "auto_fixed": True,
+            }]
+            result = guardian_core.guardian_tick()
+            # No notification should be generated for auto-fixed issues
+            self.assertFalse(result.get("notify"))
+
+    def test_unfixable_issues_appear_in_notifications(self):
+        """Issue with hermes_instruction should generate a notification."""
+        import guardian_core
+        with patch("guardian_core.self_inspect") as mock_inspect:
+            mock_inspect.return_value = [{
+                "type": "log_permission", "severity": "danger",
+                "message": "日志目录无写入权限",
+                "hermes_instruction": "执行 chmod -R 755",
+                "can_auto_fix": False, "auto_fixed": False,
+            }]
+            # Mock narrator to return notification
+            with patch("guardian_core.narrator") as mock_narr:
+                mock_narr.pick_notification.return_value = {
+                    "notify": True, "message": "日志目录无写入权限\n请帮我处理：执行 chmod -R 755",
+                    "urgency": "warn",
+                }
+                result = guardian_core.guardian_tick()
+                self.assertIn("notify", result)
+
+
 class TestGetNotification(unittest.TestCase):
     """get_notification() must handle missing/corrupted flag files."""
 

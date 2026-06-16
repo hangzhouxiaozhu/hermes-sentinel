@@ -13,6 +13,7 @@ Hermes Guardian — 守护核心（中央协调器）
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -137,6 +138,120 @@ def _first_run_setup() -> str | None:
 _first_run_setup()
 
 
+# ── 自身环境检测 ──────────────────────────────────────────
+
+def self_inspect() -> list[dict]:
+    """
+    检查自身运行环境是否完整。
+
+    对每个问题判断：
+    - can_auto_fix=True  → Sentinel 已自动修复
+    - can_auto_fix=False → 需要外部干预（Hermes 或用户）
+
+    返回:
+    [{"type": str, "severity": "info"|"warn"|"danger",
+      "message": str,       # 人话描述
+      "hermes_instruction": str,  # 给 Hermes AI 的执行指令
+      "can_auto_fix": bool,
+      "auto_fixed": bool}, ...]
+    """
+    issues: list[dict] = []
+
+    # 1. 插件检测
+    if not (PLUGIN_TARGET / "__init__.py").exists():
+        fixed = _first_run_setup()
+        if fixed and "plugin" in fixed:
+            issues.append({
+                "type": "plugin_missing",
+                "severity": "info",
+                "message": "Token 统计插件已自动安装",
+                "hermes_instruction": "",
+                "can_auto_fix": True,
+                "auto_fixed": True,
+            })
+        else:
+            issues.append({
+                "type": "plugin_missing",
+                "severity": "warn",
+                "message": "Token 统计插件未安装，API 调用不会自动记账",
+                "hermes_instruction": "帮我检查一下 Hermes Sentinel 的 plugin 目录是否正确安装到了 ~/.hermes/plugins/hermes-sentinel/，如果没有，从 skill 目录复制一份过来。",
+                "can_auto_fix": False,
+                "auto_fixed": False,
+            })
+
+    # 2. cron 检测
+    if sys.platform != "win32":
+        try:
+            cron_out = subprocess.run(
+                ["crontab", "-l"], capture_output=True, text=True, timeout=5
+            ).stdout or ""
+            if "sentinel-tick" not in cron_out:
+                fixed = _first_run_setup()
+                issues.append({
+                    "type": "cron_missing",
+                    "severity": "info" if fixed else "warn",
+                    "message": "定时巡检 cron 任务已自动配置" if fixed else "定时巡检 cron 任务未配置",
+                    "hermes_instruction": "请在终端执行 crontab -e 检查 sentinel-tick 和 sentinel-daily 任务是否存在",
+                    "can_auto_fix": True,
+                    "auto_fixed": bool(fixed),
+                })
+        except Exception:
+            pass
+
+    # 3. 日志权限检测
+    log_dir = HERMES_HOME / "logs"
+    if log_dir.exists():
+        if not os.access(str(log_dir), os.W_OK):
+            issues.append({
+                "type": "log_permission",
+                "severity": "danger",
+                "message": "日志目录 ~/.hermes/logs/ 无写入权限，可能导致监控失效",
+                "hermes_instruction": "请在终端执行 chmod -R 755 ~/.hermes/logs/ 来修复日志目录权限",
+                "can_auto_fix": False,
+                "auto_fixed": False,
+            })
+
+    # 4. Python 版本检测
+    if sys.version_info < (3, 9):
+        issues.append({
+            "type": "python_version",
+            "severity": "warn",
+            "message": f"Python {sys.version_info.major}.{sys.version_info.minor} 版本过旧，建议升级到 Python 3.9+",
+            "hermes_instruction": f"检测到 Python {sys.version_info.major}.{sys.version_info.minor}。访问 https://www.python.org/downloads/ 下载安装 Python 3.9 或更高版本",
+            "can_auto_fix": False,
+            "auto_fixed": False,
+        })
+
+    # 5. 关键系统命令检测
+    for cmd in ["curl", "ping"]:
+        if not shutil.which(cmd):
+            if cmd == "curl" and sys.platform == "win32":
+                continue
+            issues.append({
+                "type": f"cmd_missing:{cmd}",
+                "severity": "info",
+                "message": f"系统命令 {cmd} 未安装，部分网络检测能力受限",
+                "hermes_instruction": f"当前系统缺少 {cmd} 命令。macOS/Linux 请执行包管理器安装（brew install curl），Windows 用户可忽略此提示。",
+                "can_auto_fix": False,
+                "auto_fixed": False,
+            })
+
+    # 6. 日志文件大小检测（超过 50MB 警告）
+    for log_file in ["hardware_monitor.log", "network_monitor.log", "model_cost.log"]:
+        fp = log_dir / log_file
+        if fp.exists() and fp.stat().st_size > 50 * 1024 * 1024:
+            issues.append({
+                "type": f"log_too_large:{log_file}",
+                "severity": "warn",
+                "message": f"{log_file} 已超过 50MB，建议轮替或清理",
+                "hermes_instruction": f"文件 {log_file} 体积过大。请执行：rm ~/.hermes/logs/{log_file} 清理旧日志，或将日志加入 logrotate 轮替",
+                "can_auto_fix": False,
+                "auto_fixed": False,
+            })
+
+    return issues
+
+
 # ── 用户消息前置 hook ──────────────────────────────────────
 
 def guardian_before_user_message(user_input: str, context: dict = None) -> dict:
@@ -206,6 +321,16 @@ def guardian_tick() -> dict:
     _first_run_setup()
 
     notifications = []
+
+    # 0. 自身环境检测（每天最多提醒一次）
+    for issue in self_inspect():
+        if issue["can_auto_fix"] and issue["auto_fixed"]:
+            continue  # 已自动修复，静默
+        if issue.get("hermes_instruction"):
+            notifications.append({
+                "type": "self_inspect",
+                "context": issue,
+            })
 
     # 1. 硬件监控
     if hardware_monitor:
