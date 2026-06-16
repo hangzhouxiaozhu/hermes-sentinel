@@ -17,19 +17,73 @@ import os_detect
 HERMES_HOME = Path(os.path.expanduser("~/.hermes"))
 LOG_FILE = HERMES_HOME / "logs" / "hardware_monitor.log"
 
-MEMORY_WARN_PCT = 70
-MEMORY_DANGER_PCT = 85
-SWAP_WARN_PCT = 30
-SWAP_DANGER_PCT = 60
-CPU_LOAD_WARN = 5.0
+# 平台自适应阈值（由 get_thresholds() 按平台返回）
+# macOS 内存管理偏主动缓存，阈值更高；Windows 偏保守，阈值更低
+PLATFORM_THRESHOLDS = {
+    "darwin": {
+        "memory_warn": 80,      # macOS 会尽量占满内存做文件缓存
+        "memory_danger": 92,    # 超 92% 才真正有压力
+        "swap_warn": 40,
+        "swap_danger": 70,
+        "cpu_load_warn": 5.0,
+    },
+    "windows": {
+        "memory_warn": 70,
+        "memory_danger": 85,
+        "swap_warn": 30,
+        "swap_danger": 60,
+        "cpu_load_warn": 5.0,
+    },
+    "linux": {
+        "memory_warn": 75,
+        "memory_danger": 88,
+        "swap_warn": 30,
+        "swap_danger": 60,
+        "cpu_load_warn": 5.0,
+    },
+}
+
 DISK_WARN_PCT = 90
+
+
+def get_thresholds() -> dict:
+    """
+    根据操作系统返回分级阈值。
+
+    macos:  macOS 会积极使用空闲内存做文件缓存，
+            70-80% 使用率是正常状态，调到 80/92 避免假警报。
+    windows: 内存管理较保守，使用 70/85 标准阈值。
+    linux:   适中，使用 75/88。
+    """
+    system = os_detect.SYSTEM.lower()
+    if system == "darwin":
+        return dict(PLATFORM_THRESHOLDS["darwin"])
+    if system == "windows":
+        return dict(PLATFORM_THRESHOLDS["windows"])
+    return dict(PLATFORM_THRESHOLDS["linux"])
+
+
+def threshold_summary() -> dict:
+    """返回当前使用的阈值（用于日志记录）"""
+    t = get_thresholds()
+    return {
+        "memory_warn": t["memory_warn"],
+        "memory_danger": t["memory_danger"],
+        "swap_warn": t["swap_warn"],
+        "swap_danger": t["swap_danger"],
+        "cpu_load_warn": t["cpu_load_warn"],
+        "platform": os_detect.SYSTEM,
+    }
+
 
 # ── 状态判定 ──────────────────────────────────────────────
 
-def assess_level(mem_pct, swap_pct, cpu_load):
-    if mem_pct >= MEMORY_DANGER_PCT or swap_pct >= SWAP_DANGER_PCT:
+def assess_level(mem_pct, swap_pct, cpu_load, thresholds=None):
+    if thresholds is None:
+        thresholds = get_thresholds()
+    if mem_pct >= thresholds["memory_danger"] or swap_pct >= thresholds["swap_danger"]:
         return "danger"
-    elif mem_pct >= MEMORY_WARN_PCT or swap_pct >= SWAP_WARN_PCT or cpu_load >= CPU_LOAD_WARN:
+    elif mem_pct >= thresholds["memory_warn"] or swap_pct >= thresholds["swap_warn"] or cpu_load >= thresholds["cpu_load_warn"]:
         return "warn"
     return "normal"
 
@@ -71,13 +125,15 @@ def check() -> dict:
     """
     执行一次完整硬件巡检。
     实际采集通过 os_detect 跨平台完成。
+    等级判定使用平台自适应阈值。
     """
     mem = os_detect.get_memory_info()
     cpu = os_detect.get_cpu_info()
     disk = os_detect.get_disk_info()
     gpu = os_detect.get_gpu_info()
 
-    level = assess_level(mem.get("memory_pct", 0), mem.get("swap_pct", 0), cpu.get("load_1min", 0))
+    t = get_thresholds()
+    level = assess_level(mem.get("memory_pct", 0), mem.get("swap_pct", 0), cpu.get("load_1min", 0), t)
 
     snapshot = {
         "level": level,
@@ -85,6 +141,7 @@ def check() -> dict:
         "cpu": cpu,
         "disk": disk,
         "gpu": gpu,
+        "_thresholds": t,
     }
 
     write_log(snapshot)
