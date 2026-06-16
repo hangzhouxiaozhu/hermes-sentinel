@@ -276,6 +276,56 @@ Hermes Sentinel is designed to be **forgotten about** — until something needs 
 
 ---
 
+## FAQ
+
+### Is this safe? Does it send my data anywhere?
+
+**Fully safe and fully local.** Sentinel never sends your data, conversation content, API keys, or personal files anywhere. All monitoring data stays in `~/.hermes/logs/` on your own machine. The only network traffic is a TCP handshake to `1.1.1.1:443` and `8.8.8.8:443` every 10 minutes to check if the internet is reachable — the same thing your browser does when it checks connectivity. See [Privacy Notice](#privacy-notice).
+
+### Do I need to be a programmer to use this?
+
+**No.** Sentinel is designed for people who just want their AI assistant (Hermes) to work without hassle. You don't need to configure anything, run any commands, or understand technical terms like "Swap" or "DNS". If something needs attention, Sentinel tells you in plain language: *"Your computer is running low on memory — only 2GB free."* or *"Can't reach the internet — maybe the proxy isn't running?"*
+
+### Will this slow down my computer?
+
+**No.** The monitoring scripts run for 2-3 seconds every 10 minutes as a lightweight cron job. They don't stay in memory between runs. The Hermes plugin is a tiny callback (~50 lines) that fires once per API request. In testing, the total CPU impact is negligible — less than 0.1% on modern hardware.
+
+### Does it work with API proxies / relay services?
+
+**Yes.** Token counting extracts from the API response `usage` object, which all OpenAI-compatible proxies return. Cost estimation is opt-in (off by default) and only activates if you configure a price table. Most proxy users will only see token counts, not dollar amounts.
+
+### What happens if my disk gets full?
+
+Sentinel automatically cleans up log files older than 30 days when disk usage exceeds 90%. No action needed.
+
+### How do I know it's working?
+
+Check the log files:
+```bash
+tail -f ~/.hermes/logs/hardware_monitor.log   # hardware patrols every 10 min
+tail -f ~/.hermes/logs/model_cost.log         # token usage after each API call
+```
+
+Or wait for the daily report at 9:00 AM. If anything is wrong, Sentinel will tell you.
+
+### Can I use this without Hermes Agent?
+
+**No.** Sentinel is a skill/plugin for Hermes Agent. It has no standalone CLI or UI. It depends on Hermes's hook system (for token tracking) and cron tasks (for hardware/network patrols). However, the individual monitoring modules (`hardware_monitor.py`, `network_monitor.py`, `cost_tracker.py`) are pure functions that could technically be reused in other projects.
+
+### What operating systems are supported?
+
+| OS | Status | Notes |
+|----|--------|-------|
+| macOS (Intel + Apple Silicon) | ✅ **Full support** | Tested daily on Apple M4 |
+| Linux | ✅ **Full support** | `/proc/meminfo`, `ip route`, `iwconfig` |
+| Windows 10/11 | ✅ **Supported** | Task Scheduler + PowerShell CIM. `install.ps1` provided. |
+
+### How is this different from `hermes doctor`?
+
+`hermes doctor` is a manual CLI command you run when you suspect something is wrong. Sentinel is a **background daemon** that monitors continuously and proactively notifies you. They complement each other: `hermes doctor` for on-demand deep checks, Sentinel for 24/7 passive monitoring.
+
+---
+
 ## License
 
 MIT

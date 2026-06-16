@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use Hermes Sentinel in your research or project, please cite it as below."
+title: "Hermes Sentinel: Invisible Guardian for Hermes Agent"
+version: 2.0.0
+date-released: 2026-06-16
+authors:
+  - name: "hangzhouxiaozhu"
+    email: "219129385+hangzhouxiaozhu@users.noreply.github.com"
+    affiliation: "Hermes Agent Community"
+license: "MIT"
+repository-code: "https://github.com/hangzhouxiaozhu/hermes-sentinel"
+keywords:
+  - "AI assistant monitoring"
+  - "token usage tracking"
+  - "hardware monitoring"
+  - "network quality detection"
+  - "security audit"
+  - "Hermes Agent"
+  - "background daemon"
+  - "intent translator"
+abstract: "Hermes Sentinel is a fully automatic background daemon skill for Hermes Agent. It provides hardware monitoring (memory/CPU/disk/GPU), network quality detection (proxy/VPN/DNS/internet), token usage tracking (from API response), security audit (pre-scan for secrets and malicious commands), self-healing, and a beginner-friendly intent translator that turns fuzzy inputs like 'too dark' or 'garbled' into clear executable instructions. Cross-platform (macOS/Linux/Windows), zero-config, fully local, no data leaves the machine."
