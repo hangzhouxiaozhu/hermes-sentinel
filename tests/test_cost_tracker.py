@@ -113,9 +113,10 @@ class TestRecordFromResponse(unittest.TestCase):
 class TestGetDailySummary(unittest.TestCase):
 
     def test_no_log(self):
-        s = get_daily_summary()
-        self.assertEqual(s["total_calls"], 0)
-        self.assertEqual(s["total_tokens"], 0)
+        with patch("cost_tracker.LOG_FILE", Path(tempfile.mktemp())):
+            s = get_daily_summary()
+            self.assertEqual(s["total_calls"], 0)
+            self.assertEqual(s["total_tokens"], 0)
 
 
 class TestGetUserFriendlySummary(unittest.TestCase):

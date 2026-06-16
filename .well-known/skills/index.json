@@ -1,0 +1,37 @@
+{
+  "skills": [
+    {
+      "name": "hermes-sentinel",
+      "description": "Hermes Agent background daemon skill — auto hardware/network monitoring, token usage tracking, security audit, self-healing, and beginner-friendly intent translator. Cross-platform (macOS/Linux/Windows), zero-config, fully local.",
+      "files": [
+        "SKILL.md",
+        "scripts/__init__.py",
+        "scripts/guardian_core.py",
+        "scripts/hardware_monitor.py",
+        "scripts/network_monitor.py",
+        "scripts/cost_tracker.py",
+        "scripts/self_heal.py",
+        "scripts/skill_auditor.py",
+        "scripts/os_detect.py",
+        "scripts/narrator.py",
+        "scripts/intent_translator.py",
+        "scripts/daily_report.py",
+        "cron/hardware-check.sh",
+        "cron/daily-backup.sh",
+        "cron/hardware-check.cmd",
+        "cron/daily-backup.cmd",
+        "plugin/__init__.py",
+        "plugin/plugin.yaml",
+        "install.sh",
+        "install.ps1",
+        "templates/monitor-config.yaml",
+        "references/memory-thresholds.md",
+        "references/model-cost-reference.md",
+        "references/security-policy.md",
+        "CITATION.cff",
+        "LICENSE",
+        "README.md"
+      ]
+    }
+  ]
+}

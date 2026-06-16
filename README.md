@@ -112,27 +112,36 @@ All Sentinel modules follow the same flow:
 
 ## Quick Start
 
-### macOS / Linux
+### Install via Hermes (recommended, all platforms)
 
 ```bash
-# 1. Download
-git clone https://github.com/hangzhouxiaozhu/hermes-sentinel.git
-# or: Download ZIP from GitHub → unzip
-
-# 2. Install
-cp -r hermes-sentinel ~/.hermes/skills/system/
-
-# 3. One-time setup (optional — for cron + plugin)
-cd ~/.hermes/skills/system/hermes-sentinel
-bash install.sh
+hermes skills install https://hangzhouxiaozhu.github.io/hermes-sentinel
 ```
 
-> ⚠️ `hermes skills install hermes-sentinel` will NOT work — this skill is not in the official registry. Use `cp -r` instead.
+This uses the Well-Known skill discovery protocol. No manual download needed.
 
-**What happens on first load:**
+### Manual (macOS / Linux)
+
+```bash
+git clone https://github.com/hangzhouxiaozhu/hermes-sentinel.git
+cp -r hermes-sentinel ~/.hermes/skills/system/
+# Optional cron + plugin setup:
+cd ~/.hermes/skills/system/hermes-sentinel && bash install.sh
+```
+
+### Manual (Windows)
+
+```powershell
+# Download ZIP from GitHub → extract → open PowerShell in the folder
+Copy-Item -Recurse -Force ".\hermes-sentinel" "$env:USERPROFILE\.hermes\skills\system\"
+.\install.ps1  # optional: scheduled task + plugin
+```
+
+**What happens on first load (all methods):**
 1. Log directories created automatically
 2. Token tracking plugin auto-installed
-3. Cron patrol (every 10 min) + daily report (9:00 AM) configured
+3. Cron (macOS/Linux) or Task Scheduler (Windows) configured
+4. Monitoring starts within 10 minutes
 4. Monitoring starts within 10 minutes
 
 ---

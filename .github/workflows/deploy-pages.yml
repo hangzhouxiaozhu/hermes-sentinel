@@ -1,0 +1,55 @@
+name: Deploy GitHub Pages — Well-Known Skill Index
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build well-known skill directory
+        run: |
+          SITE="_site"
+          SKILL="$SITE/.well-known/skills/hermes-sentinel"
+          mkdir -p "$SKILL/scripts" "$SKILL/plugin" "$SKILL/cron" \
+                   "$SKILL/templates" "$SKILL/references"
+
+          # Index (must be at .well-known/skills/index.json)
+          cp .well-known/skills/index.json "$SITE/.well-known/skills/"
+
+          # Skill files (mirror repo structure under hermes-sentinel/)
+          cp SKILL.md "$SKILL/"
+          cp scripts/*.py "$SKILL/scripts/"
+          cp plugin/__init__.py plugin/plugin.yaml "$SKILL/plugin/"
+          cp cron/hardware-check.sh cron/daily-backup.sh "$SKILL/cron/"
+          cp cron/hardware-check.cmd cron/daily-backup.cmd "$SKILL/cron/"
+          cp install.sh install.ps1 "$SKILL/"
+          cp templates/monitor-config.yaml "$SKILL/templates/"
+          cp references/*.md "$SKILL/references/"
+          cp CITATION.cff LICENSE README.md "$SKILL/"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4

@@ -221,9 +221,13 @@ All logs in `~/.hermes/logs/` (JSONL format, for admin troubleshooting), **no co
 
 ## Installation
 
-> ⚠️ `hermes skills install hermes-sentinel` does NOT work — this skill is not in the official registry.
+### Via Hermes (recommended, all platforms)
 
-### macOS / Linux
+```bash
+hermes skills install https://hangzhouxiaozhu.github.io/hermes-sentinel
+```
+
+### Manual (macOS / Linux)
 
 ```bash
 git clone https://github.com/hangzhouxiaozhu/hermes-sentinel.git
@@ -231,12 +235,10 @@ cp -r hermes-sentinel ~/.hermes/skills/system/
 # Optional: bash install.sh for cron + plugin
 ```
 
-### Windows
+### Manual (Windows)
 
 ```powershell
-# Download ZIP from GitHub → extract → open PowerShell in the folder
-$env:HERMES_HOME = "$env:USERPROFILE\.hermes"
-Copy-Item -Recurse -Force ".\hermes-sentinel" "$env:HERMES_HOME\skills\system\"
+Copy-Item -Recurse -Force ".\hermes-sentinel" "$env:USERPROFILE\.hermes\skills\system\"
 # Optional: .\install.ps1 for scheduled tasks + plugin
 ```
 
